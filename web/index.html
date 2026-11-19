@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boomy HighController Console</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel-border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #2f81f7;
+    --green: #3fb950;
+    --yellow: #d29922;
+    --red: #f85149;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+  }
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--panel-border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 8px var(--red);
+  }
+  .dot.ok {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+  }
+  .status-pills {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+  .pill {
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #21262d;
+    border: 1px solid var(--panel-border);
+    font-size: 12px;
+    color: var(--text);
+  }
+  .pill.mode { border-color: var(--accent); color: #79c0ff; font-weight: 600; }
+  .pill.warn { border-color: var(--red); color: #ffa198; }
+  .header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  button {
+    cursor: pointer;
+    border: 1px solid var(--panel-border);
+    background: #21262d;
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.12s ease;
+    user-select: none;
+  }
+  button:hover { background: #30363d; border-color: #8b949e; }
+  button:active { transform: scale(0.97); }
+  button.primary { background: #1f6feb; border-color: #388bfd; }
+  button.primary:hover { background: #388bfd; }
+  button.success { background: #238636; border-color: #2ea043; }
+  button.success:hover { background: #2ea043; }
+  button.warn { background: #9e6a03; border-color: #d29922; }
+  button.warn:hover { background: #bb8009; }
+  button.danger { background: #da3633; border-color: #f85149; font-weight: 700; }
+  button.danger:hover { background: #f85149; }
+  button.lang-btn { font-weight: 600; border-color: var(--accent); color: #79c0ff; }
+
+  main {
+    display: grid;
+    grid-template-columns: 440px 1fr;
+    gap: 16px;
+    padding: 16px 20px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  @media (max-width: 1024px) {
+    main { grid-template-columns: 1fr; }
+  }
+  .col { display: flex; flex-direction: column; gap: 16px; }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .card h2 {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.4px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .btn-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  .drive-wrap {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .joystick {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #21262d 0%, #0d1117 100%);
+    border: 2px solid var(--panel-border);
+    position: relative;
+    touch-action: none;
+    flex-shrink: 0;
+  }
+  .stick {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 14px rgba(47, 129, 247, 0.5);
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .dpad {
+    display: grid;
+    grid-template-columns: repeat(3, 56px);
+    grid-template-rows: repeat(3, 44px);
+    gap: 6px;
+  }
+  .dpad button { padding: 0; font-size: 12px; }
+  .vel-readout {
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .slider-row {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .slider-row input { flex: 1; }
+
+  .teach-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .teach-row input {
+    width: 72px;
+    background: #0d1117;
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    padding: 6px 8px;
+    border-radius: 6px;
+  }
+
+  .imu-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+  }
+  .imu-box {
+    background: #0d1117;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+  .imu-box .lbl { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+
+  .table-wrap {
+    overflow-x: auto;
+    max-height: 520px;
+    overflow-y: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  th, td {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #21262d;
+    white-space: nowrap;
+  }
+  th { color: var(--muted); position: sticky; top: 0; background: var(--panel); }
+  tr.err-row { background: rgba(248, 81, 73, 0.16); color: #ffa198; }
+
+  #toast {
+    position: fixed;
+    bottom: 18px;
+    right: 18px;
+    background: #21262d;
+    border: 1px solid var(--accent);
+    color: var(--text);
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-size: 13px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div id="connDot" class="dot"></div>
+    <span data-i18n="brandTitle">Boomy HighController 控制台</span>
+  </div>
+  <div class="status-pills">
+    <span id="pillConn" class="pill">--</span>
+    <span id="pillMode" class="pill mode">--</span>
+    <span id="pillBms" class="pill">--</span>
+  </div>
+  <div class="header-actions">
+    <button id="langToggle" class="lang-btn" onclick="toggleLang()">EN / 中文</button>
+    <button class="warn" onclick="sendCmd('START')" data-i18n="btnStart">使能 / 失能 (START)</button>
+    <button class="danger" onclick="sendEstop()" data-i18n="btnEstop">紧急停止 (ESTOP)</button>
+  </div>
+</header>
+
+<main>
+  <div class="col">
+    <div class="card">
+      <h2>
+        <span data-i18n="secDrive">移动控制 (仅 WALK / PLAYTEACH / DEFAULT 有效)</span>
+        <span data-i18n="secKeys">键盘: WASD + Q/E</span>
+      </h2>
+      <div class="drive-wrap">
+        <div id="joystick" class="joystick">
+          <div id="stick" class="stick"></div>
+        </div>
+        <div class="dpad">
+          <button onpointerdown="holdVel(0,0,1)" onpointerup="stopVel()" onpointerleave="stopVel()" data-i18n="btnTurnL">左转 Q</button>
+          <button onpointerdown="holdVel(1,0,0)" onpointerup="stopVel()" onpointerleave="stopVel()" data-i18n="btnFwd">前进 W</button>
+          <button onpointerdown="holdVel(0,0,-1)" onpointerup="stopVel()" onpointerleave="stopVel()" data-i18n="btnTurnR">右转 E</button>
+          <button onpointerdown="holdVel(0,1,0)" onpointerup="stopVel()" onpointerleave="stopVel()" data-i18n="btnLeft">左移 A</button>
+          <button class="danger" onclick="stopVel()" data-i18n="btnZero">归零</button>
+          <button onpointerdown="holdVel(0,-1,0)" onpointerup="stopVel()" onpointerleave="stopVel()" data-i18n="btnRight">右移 D</button>
+          <div></div>
+          <button onpointerdown="holdVel(-1,0,0)" onpointerup="stopVel()" onpointerleave="stopVel()" data-i18n="btnBack">后退 S</button>
+          <div></div>
+        </div>
+      </div>
+      <div class="slider-row">
+        <span data-i18n="lblSpeedScale">最大速度倍率:</span>
+        <input id="speedScale" type="range" min="0.1" max="1.0" step="0.05" value="0.5"
+               oninput="document.getElementById('scaleVal').textContent = this.value">
+        <span id="scaleVal">0.5</span>
+      </div>
+      <div class="vel-readout">
+        <span id="velText">--</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="secStateMachine">状态机切换 (顺序: 使能 → 准备 → 半身走路)</h2>
+      <div class="btn-grid">
+        <button class="primary" onclick="sendCmd('SWITCH')" data-i18n="btnSwitch">准备模式 (SWITCH)</button>
+        <button class="success" onclick="sendCmd('WALK')" data-i18n="btnWalk">半身走路 (WALK)</button>
+        <button class="success" onclick="sendCmd('FULLWALK')" data-i18n="btnFullWalk">全身行走 (FULLWALK)</button>
+        <button onclick="sendCmd('FALLTOSTAND')" data-i18n="btnStandUp">倒地起身</button>
+        <button class="warn" onclick="sendCmd('STANDTOFALL')" data-i18n="btnFold">一键收纳</button>
+        <button onclick="sendCmd('DEFAULT')" data-i18n="btnDefault">空指令 (DEFAULT)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="secActions">预设动作与舞蹈 (需处于半身走路模式)</h2>
+      <div class="btn-grid">
+        <button onclick="sendCmd('SWING')" data-i18n="btnSwing">挥手 (SWING)</button>
+        <button onclick="sendCmd('SHAKE')" data-i18n="btnShake">握手 (SHAKE)</button>
+        <button onclick="sendCmd('CHEER')" data-i18n="btnCheer">欢呼 (CHEER)</button>
+        <button onclick="sendCmd('ZHOUJI')" data-i18n="btnZhouji">肘击 (ZHOUJI)</button>
+        <button onclick="sendCmd('DANCE0')" data-i18n="btnDance0">舞蹈 0</button>
+        <button onclick="sendCmd('DANCE1')" data-i18n="btnDance1">舞蹈 1</button>
+        <button onclick="sendCmd('DANCE2')" data-i18n="btnDance2">舞蹈 2</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="secTeach">示教模式</h2>
+      <div class="teach-row">
+        <label for="teachIdx" data-i18n="lblTeachIdx">示教索引:</label>
+        <input id="teachIdx" type="number" min="0" max="99" value="1">
+      </div>
+      <div class="btn-grid-2">
+        <button onclick="sendCmd('STARTTEACH')" data-i18n="btnStartTeach">开始示教</button>
+        <button onclick="sendCmd('ENDTEACH')" data-i18n="btnEndTeach">结束示教</button>
+        <button onclick="sendTeach('SAVETEACH')" data-i18n="btnSaveTeach">保存示教</button>
+        <button class="primary" onclick="sendTeach('PLAYTEACH')" data-i18n="btnPlayTeach">播放示教</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="card">
+      <h2 data-i18n="secImu">IMU 实时姿态与传感器</h2>
+      <div class="imu-grid">
+        <div class="imu-box">
+          <div class="lbl" data-i18n="lblOri">四元数 (ori)</div>
+          <div id="imuOri">--</div>
+        </div>
+        <div class="imu-box">
+          <div class="lbl" data-i18n="lblGyro">角速度 (angular_vel)</div>
+          <div id="imuGyro">--</div>
+        </div>
+        <div class="imu-box">
+          <div class="lbl" data-i18n="lblAcc">线加速度 (linear_acc)</div>
+          <div id="imuAcc">--</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 data-i18n="secMotors">21 关节电机实时状态</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th data-i18n="thName">关节名称</th>
+              <th data-i18n="thPos">位置 (rad)</th>
+              <th data-i18n="thVel">转速</th>
+              <th data-i18n="thTau">扭矩</th>
+              <th data-i18n="thTemp">温度</th>
+              <th data-i18n="thErr">错误码</th>
+            </tr>
+          </thead>
+          <tbody id="motorBody">
+            <tr><td colspan="7" style="color: var(--muted);" data-i18n="waitingMotors">等待机器人状态数据...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<script>
+const I18N = {
+  zh: {
+    brandTitle: "Boomy HighController 控制台",
+    btnStart: "使能 / 失能 (START)",
+    btnEstop: "紧急停止 (ESTOP)",
+    secDrive: "移动控制 (仅 WALK / PLAYTEACH / DEFAULT 有效)",
+    secKeys: "键盘: WASD + Q/E",
+    btnTurnL: "左转 Q",
+    btnFwd: "前进 W",
+    btnTurnR: "右转 E",
+    btnLeft: "左移 A",
+    btnZero: "归零",
+    btnRight: "右移 D",
+    btnBack: "后退 S",
+    lblSpeedScale: "最大速度倍率:",
+    secStateMachine: "状态机切换 (顺序: 使能 → 准备 → 半身走路)",
+    btnSwitch: "准备模式 (SWITCH)",
+    btnWalk: "半身走路 (WALK)",
+    btnFullWalk: "全身行走 (FULLWALK)",
+    btnStandUp: "倒地起身",
+    btnFold: "一键收纳",
+    btnDefault: "空指令 (DEFAULT)",
+    secActions: "预设动作与舞蹈 (需处于半身走路模式)",
+    btnSwing: "挥手 (SWING)",
+    btnShake: "握手 (SHAKE)",
+    btnCheer: "欢呼 (CHEER)",
+    btnZhouji: "肘击 (ZHOUJI)",
+    btnDance0: "舞蹈 0",
+    btnDance1: "舞蹈 1",
+    btnDance2: "舞蹈 2",
+    secTeach: "示教模式",
+    lblTeachIdx: "示教索引:",
+    btnStartTeach: "开始示教",
+    btnEndTeach: "结束示教",
+    btnSaveTeach: "保存示教",
+    btnPlayTeach: "播放示教",
+    secImu: "IMU 实时姿态与传感器",
+    lblOri: "四元数 (ori)",
+    lblGyro: "角速度 (angular_vel)",
+    lblAcc: "线加速度 (linear_acc)",
+    secMotors: "21 关节电机实时状态",
+    thName: "关节名称",
+    thPos: "位置 (rad)",
+    thVel: "转速",
+    thTau: "扭矩",
+    thTemp: "温度",
+    thErr: "错误码",
+    waitingMotors: "等待机器人状态数据...",
+    connOk: (ms) => `已连接 (${ms}ms)`,
+    connWait: "等待机器人回传...",
+    connLost: "后端连接断开",
+    modePrefix: "模式",
+    bmsFmt: (b) => `电池: ${b.soc}% | ${b.temp}°C | 健康:${b.soh}%`,
+    velFmt: (v) => `下发速度: x=${v[0].toFixed(2)}, y=${v[1].toFixed(2)}, z=${v[2].toFixed(2)}`,
+    toastSent: (a) => `已发送指令: ${a}`,
+    toastErr: (e) => `发送失败: ${e}`,
+    toastReqErr: (e) => `请求失败: ${e}`,
+    toastEstop: "已触发急停 / 失能",
+    toastEstopErr: (e) => `急停请求异常: ${e}`,
+    modes: {
+      0: "使能模式", 1: "准备模式", 2: "半身走路模式", 3: "全身行走模式",
+      4: "跑步模式", 5: "舞蹈模式0", 8: "预设动作·打招呼", 9: "预设动作·握手",
+      10: "预设动作·欢呼", 11: "开始示教", 12: "结束示教", 13: "播放示教",
+      14: "保存示教", 26: "保护模式", 27: "倒地起身", 28: "起身倒地",
+      29: "保存示教动作", 30: "失能模式", 31: "舞蹈模式1", 32: "舞蹈模式2", 33: "肘击动作"
+    }
+  },
+  en: {
+    brandTitle: "Boomy HighController Console",
+    btnStart: "Enable / Disable (START)",
+    btnEstop: "E-STOP",
+    secDrive: "Motion Control (WALK / PLAYTEACH / DEFAULT)",
+    secKeys: "Keys: WASD + Q/E",
+    btnTurnL: "Turn L (Q)",
+    btnFwd: "Fwd (W)",
+    btnTurnR: "Turn R (E)",
+    btnLeft: "Left (A)",
+    btnZero: "Zero",
+    btnRight: "Right (D)",
+    btnBack: "Back (S)",
+    lblSpeedScale: "Max Speed Scale:",
+    secStateMachine: "State Machine (Enable → Switch → Walk)",
+    btnSwitch: "Ready (SWITCH)",
+    btnWalk: "Half Walk (WALK)",
+    btnFullWalk: "Full Walk (FULLWALK)",
+    btnStandUp: "Stand Up",
+    btnFold: "Fold / Stow",
+    btnDefault: "Idle (DEFAULT)",
+    secActions: "Preset Actions & Dances (Requires WALK mode)",
+    btnSwing: "Wave (SWING)",
+    btnShake: "Shake (SHAKE)",
+    btnCheer: "Cheer (CHEER)",
+    btnZhouji: "Elbow (ZHOUJI)",
+    btnDance0: "Dance 0",
+    btnDance1: "Dance 1",
+    btnDance2: "Dance 2",
+    secTeach: "Teach Mode",
+    lblTeachIdx: "Teach Index:",
+    btnStartTeach: "Start Teach",
+    btnEndTeach: "End Teach",
+    btnSaveTeach: "Save Teach",
+    btnPlayTeach: "Play Teach",
+    secImu: "IMU Telemetry",
+    lblOri: "Quaternion (ori)",
+    lblGyro: "Angular Vel",
+    lblAcc: "Linear Acc",
+    secMotors: "21-DOF Joint Motor Telemetry",
+    thName: "Joint Name",
+    thPos: "Pos (rad)",
+    thVel: "Vel",
+    thTau: "Torque",
+    thTemp: "Temp",
+    thErr: "Error",
+    waitingMotors: "Waiting for robot telemetry...",
+    connOk: (ms) => `Connected (${ms}ms)`,
+    connWait: "Waiting for robot...",
+    connLost: "Backend disconnected",
+    modePrefix: "Mode",
+    bmsFmt: (b) => `Battery: ${b.soc}% | ${b.temp}°C | SOH:${b.soh}%`,
+    velFmt: (v) => `Cmd Vel: x=${v[0].toFixed(2)}, y=${v[1].toFixed(2)}, z=${v[2].toFixed(2)}`,
+    toastSent: (a) => `Sent: ${a}`,
+    toastErr: (e) => `Failed: ${e}`,
+    toastReqErr: (e) => `Request error: ${e}`,
+    toastEstop: "E-STOP / Disable triggered",
+    toastEstopErr: (e) => `E-STOP error: ${e}`,
+    modes: {
+      0: "Enabled", 1: "Ready (Switch)", 2: "Half Walk", 3: "Full Walk",
+      4: "Running", 5: "Dance 0", 8: "Preset: Wave", 9: "Preset: Shake",
+      10: "Preset: Cheer", 11: "Start Teach", 12: "End Teach", 13: "Play Teach",
+      14: "Save Teach", 26: "Protected", 27: "Fall to Stand", 28: "Stand to Fall",
+      29: "Saving Teach", 30: "Disabled", 31: "Dance 1", 32: "Dance 2", 33: "Elbow Strike"
+    }
+  }
+};
+
+const EN_JOINT_DESC = [
+  "arm_l1_joint (L Shoulder Pitch)", "arm_l2_joint (L Shoulder Roll)",
+  "arm_l3_joint (L Arm Yaw)", "arm_l4_joint (L Elbow Pitch)",
+  "leg_l1_joint (L Hip Pitch)", "leg_l2_joint (L Hip Roll)",
+  "leg_l3_joint (L Thigh Yaw)", "leg_l4_joint (L Knee Pitch)",
+  "leg_l5_joint (L Ankle Pitch)", "leg_l6_joint (L Ankle Roll)",
+  "arm_r1_joint (R Shoulder Pitch)", "arm_r2_joint (R Shoulder Roll)",
+  "arm_r3_joint (R Arm Yaw)", "arm_r4_joint (R Elbow Pitch)",
+  "leg_r1_joint (R Hip Pitch)", "leg_r2_joint (R Hip Roll)",
+  "leg_r3_joint (R Thigh Yaw)", "leg_r4_joint (R Knee Pitch)",
+  "leg_r5_joint (R Ankle Pitch)", "leg_r6_joint (R Ankle Roll)",
+  "waist_1_joint (Waist Yaw)"
+];
+
+let lang = localStorage.getItem("boomy_lang") || "zh";
+let activeVel = [0, 0, 0];
+let lastSnapshot = null;
+
+function applyI18n() {
+  const dict = I18N[lang];
+  document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+  document.getElementById("langToggle").textContent = lang === "zh" ? "中文 → EN" : "EN → 中文";
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.getAttribute("data-i18n");
+    if (dict[key]) el.textContent = dict[key];
+  });
+  document.getElementById("velText").textContent = dict.velFmt(activeVel);
+  if (lastSnapshot) renderSnapshot(lastSnapshot);
+}
+
+function toggleLang() {
+  lang = lang === "zh" ? "en" : "zh";
+  localStorage.setItem("boomy_lang", lang);
+  applyI18n();
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 1800);
+}
+
+async function postJson(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {})
+  });
+  return res.json();
+}
+
+async function sendCmd(action, index = 0) {
+  const dict = I18N[lang];
+  try {
+    const r = await postJson("/api/cmd", { action, index });
+    toast(r.ok ? dict.toastSent(action) : dict.toastErr(r.error));
+  } catch (e) {
+    toast(dict.toastReqErr(e));
+  }
+}
+
+function sendTeach(action) {
+  const idx = parseInt(document.getElementById("teachIdx").value || "0", 10);
+  sendCmd(action, idx);
+}
+
+async function sendEstop() {
+  const dict = I18N[lang];
+  stopVel();
+  try {
+    await postJson("/api/estop", {});
+    toast(dict.toastEstop);
+  } catch (e) {
+    toast(dict.toastEstopErr(e));
+  }
+}
+
+let velTimer = null;
+
+function getScale() {
+  return parseFloat(document.getElementById("speedScale").value || "0.5");
+}
+
+function pushVel(x, y, z) {
+  const s = getScale();
+  activeVel = [x * s, y * s, z * s];
+  document.getElementById("velText").textContent = I18N[lang].velFmt(activeVel);
+  postJson("/api/vel", { x: activeVel[0], y: activeVel[1], z: activeVel[2] }).catch(() => {});
+}
+
+function holdVel(x, y, z) {
+  pushVel(x, y, z);
+  clearInterval(velTimer);
+  velTimer = setInterval(() => pushVel(x, y, z), 150);
+}
+
+function stopVel() {
+  clearInterval(velTimer);
+  velTimer = null;
+  activeVel = [0, 0, 0];
+  document.getElementById("velText").textContent = I18N[lang].velFmt(activeVel);
+  postJson("/api/vel", { x: 0, y: 0, z: 0 }).catch(() => {});
+  resetStick();
+}
+
+// Virtual Joystick
+const joyEl = document.getElementById("joystick");
+const stickEl = document.getElementById("stick");
+let dragging = false;
+
+function resetStick() {
+  stickEl.style.left = "50%";
+  stickEl.style.top = "50%";
+}
+
+function handleJoyMove(clientX, clientY) {
+  const rect = joyEl.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const maxR = rect.width / 2 - 27;
+  let dx = clientX - cx;
+  let dy = clientY - cy;
+  const dist = Math.hypot(dx, dy);
+  if (dist > maxR) {
+    dx = (dx / dist) * maxR;
+    dy = (dy / dist) * maxR;
+  }
+  stickEl.style.left = `${50 + (dx / rect.width) * 100}%`;
+  stickEl.style.top = `${50 + (dy / rect.height) * 100}%`;
+
+  const vx = -dy / maxR;
+  const vz = -dx / maxR;
+  pushVel(vx, 0, vz);
+}
+
+joyEl.addEventListener("pointerdown", (e) => {
+  dragging = true;
+  joyEl.setPointerCapture(e.pointerId);
+  handleJoyMove(e.clientX, e.clientY);
+  clearInterval(velTimer);
+  velTimer = setInterval(() => {
+    postJson("/api/vel", { x: activeVel[0], y: activeVel[1], z: activeVel[2] }).catch(() => {});
+  }, 150);
+});
+joyEl.addEventListener("pointermove", (e) => {
+  if (dragging) handleJoyMove(e.clientX, e.clientY);
+});
+joyEl.addEventListener("pointerup", () => { dragging = false; stopVel(); });
+joyEl.addEventListener("pointercancel", () => { dragging = false; stopVel(); });
+
+// Keyboard WASD + QE
+const keysDown = new Set();
+function recomputeKeys() {
+  let x = 0, y = 0, z = 0;
+  if (keysDown.has("KeyW")) x += 1;
+  if (keysDown.has("KeyS")) x -= 1;
+  if (keysDown.has("KeyA")) y += 1;
+  if (keysDown.has("KeyD")) y -= 1;
+  if (keysDown.has("KeyQ")) z += 1;
+  if (keysDown.has("KeyE")) z -= 1;
+  if (x === 0 && y === 0 && z === 0) {
+    stopVel();
+  } else {
+    holdVel(x, y, z);
+  }
+}
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code) && !keysDown.has(e.code)) {
+    keysDown.add(e.code);
+    recomputeKeys();
+  } else if (e.code === "Space") {
+    e.preventDefault();
+    sendEstop();
+  }
+});
+window.addEventListener("keyup", (e) => {
+  if (keysDown.has(e.code)) {
+    keysDown.delete(e.code);
+    recomputeKeys();
+  }
+});
+
+function renderSnapshot(data) {
+  const dict = I18N[lang];
+  const dot = document.getElementById("connDot");
+  const pillConn = document.getElementById("pillConn");
+  const pillMode = document.getElementById("pillMode");
+  const pillBms = document.getElementById("pillBms");
+
+  if (data.connected && data.status) {
+    dot.classList.add("ok");
+    pillConn.textContent = dict.connOk(data.age_ms);
+    const st = data.status;
+    const modeName = dict.modes[st.workmode] || st.workmode_name;
+    pillMode.textContent = `${dict.modePrefix}: ${st.workmode} · ${modeName}`;
+    pillMode.className = "pill " + (st.workmode === 26 || st.workmode === 30 ? "warn" : "mode");
+    pillBms.textContent = dict.bmsFmt(st.bms);
+
+    document.getElementById("imuOri").textContent = st.imu.ori.join(", ");
+    document.getElementById("imuGyro").textContent = st.imu.angular_vel.join(", ");
+    document.getElementById("imuAcc").textContent = st.imu.linear_acc.join(", ");
+
+    const tbody = document.getElementById("motorBody");
+    tbody.innerHTML = st.motors.map((m, idx) => {
+      const displayName = (lang === "en" && EN_JOINT_DESC[idx]) ? EN_JOINT_DESC[idx] : m.name;
+      return `
+        <tr class="${m.error !== 0 ? 'err-row' : ''}">
+          <td>${m.id}</td>
+          <td>${displayName}</td>
+          <td>${m.pos.toFixed(3)}</td>
+          <td>${m.vel.toFixed(3)}</td>
+          <td>${m.tau.toFixed(2)}</td>
+          <td>${m.temp}°C</td>
+          <td>${m.error === 0 ? '0' : '0x' + m.error.toString(16).toUpperCase()}</td>
+        </tr>
+      `;
+    }).join("");
+  } else {
+    dot.classList.remove("ok");
+    pillConn.textContent = dict.connWait;
+  }
+}
+
+async function pollStatus() {
+  try {
+    const res = await fetch("/api/status");
+    const data = await res.json();
+    lastSnapshot = data;
+    renderSnapshot(data);
+  } catch (e) {
+    document.getElementById("connDot").classList.remove("ok");
+    document.getElementById("pillConn").textContent = I18N[lang].connLost;
+  }
+}
+
+applyI18n();
+setInterval(pollStatus, 200);
+pollStatus();
+</script>
+</body>
+</html>
