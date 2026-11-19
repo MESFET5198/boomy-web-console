@@ -245,6 +245,73 @@
   th { color: var(--muted); position: sticky; top: 0; background: var(--panel); }
   tr.err-row { background: rgba(248, 81, 73, 0.16); color: #ffa198; }
 
+  /* Choreography Sequencer */
+  .choreo-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .choreo-add {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 8px;
+    background: #0d1117;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+  }
+  .choreo-add select, .choreo-add input {
+    background: #161b22;
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    padding: 5px 8px;
+    border-radius: 5px;
+    font-size: 12px;
+  }
+  .choreo-add input[type="number"] { width: 64px; }
+  .choreo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 220px;
+    overflow-y: auto;
+    margin-bottom: 10px;
+  }
+  .choreo-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 10px;
+    background: #0d1117;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+  }
+  .choreo-item.running { border-color: var(--accent); background: rgba(47, 129, 247, 0.14); }
+  .choreo-item.done { border-color: var(--green); }
+  .choreo-item.warn { border-color: var(--yellow); }
+  .choreo-item.error { border-color: var(--red); background: rgba(248, 81, 73, 0.14); }
+  .choreo-item .step-ops { display: flex; gap: 4px; }
+  .choreo-item .step-ops button { padding: 2px 7px; font-size: 11px; }
+  .choreo-log {
+    background: #0d1117;
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 8px 10px;
+    height: 110px;
+    overflow-y: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: #c9d1d9;
+    white-space: pre-wrap;
+  }
+
   #toast {
     position: fixed;
     bottom: 18px;
@@ -356,6 +423,57 @@
 
   <div class="col">
     <div class="card">
+      <h2>
+        <span data-i18n="secChoreo">动作编排台 (Choreography)</span>
+        <span id="choreoStatusBadge" class="pill" data-i18n="choreoIdle">空闲</span>
+      </h2>
+      <div class="choreo-toolbar">
+        <button class="primary" id="btnRunChoreo" onclick="runChoreo()" data-i18n="btnRunChoreo">▶ 运行编排</button>
+        <button class="danger" onclick="stopChoreo()" data-i18n="btnStopChoreo">⏹ 停止编排</button>
+        <button onclick="loadPreset('outro')" data-i18n="btnLoadOutro">片尾节目 (Outro)</button>
+        <button onclick="loadPreset('crab')" data-i18n="btnLoadCrab">横移节目 (Crab)</button>
+        <button onclick="clearChoreo()" data-i18n="btnClearChoreo">清空</button>
+      </div>
+      <div class="choreo-add">
+        <select id="addKind" onchange="onKindChange()">
+          <option value="mode">MODE</option>
+          <option value="move" selected>MOVE</option>
+          <option value="action">ACTION</option>
+          <option value="pause">PAUSE</option>
+        </select>
+        <select id="addModeVal" style="display:none;">
+          <option value="WALK">WALK</option>
+          <option value="FULLWALK">FULLWALK</option>
+        </select>
+        <select id="addActionVal" style="display:none;">
+          <option value="SWING">SWING</option>
+          <option value="SHAKE">SHAKE</option>
+          <option value="CHEER">CHEER</option>
+          <option value="PLAYTEACH">PLAYTEACH</option>
+          <option value="ZHOUJI">ZHOUJI</option>
+          <option value="DANCE0">DANCE0</option>
+          <option value="DANCE1">DANCE1</option>
+          <option value="DANCE2">DANCE2</option>
+        </select>
+        <span id="addMoveInputs" style="display:flex;gap:4px;align-items:center;">
+          x<input id="mvX" type="number" step="0.1" min="-1" max="1" value="0.4">
+          y<input id="mvY" type="number" step="0.1" min="-1" max="1" value="0">
+          z<input id="mvZ" type="number" step="0.1" min="-1" max="1" value="0">
+          s<input id="mvS" type="number" step="0.5" min="0.2" max="15" value="2.0">
+        </span>
+        <span id="addIdxWrap" style="display:none;">
+          idx<input id="actIdx" type="number" min="0" max="99" value="1">
+        </span>
+        <span id="addPauseWrap" style="display:none;">
+          s<input id="pauseS" type="number" step="0.5" min="0.2" max="30" value="1.0">
+        </span>
+        <button onclick="addStepFromUI()" data-i18n="btnAddStep">+ 添加</button>
+      </div>
+      <div id="choreoList" class="choreo-list"></div>
+      <div id="choreoLog" class="choreo-log"></div>
+    </div>
+
+    <div class="card">
       <h2 data-i18n="secImu">IMU 实时姿态与传感器</h2>
       <div class="imu-grid">
         <div class="imu-box">
@@ -463,6 +581,20 @@ const I18N = {
     confirmForceDisable: (msg) => `${msg}\n\n确定仍要强制失能 (force) 吗？`,
     toastDisabled: "已发送失能指令 (START)",
     toastDisableErr: (e) => `失能失败: ${e}`,
+    secChoreo: "动作编排台 (Choreography)",
+    choreoIdle: "空闲",
+    choreoRunning: "运行中",
+    btnRunChoreo: "▶ 运行编排",
+    btnStopChoreo: "⏹ 停止编排",
+    btnLoadOutro: "片尾节目 (Outro)",
+    btnLoadCrab: "横移节目 (Crab)",
+    btnClearChoreo: "清空",
+    btnAddStep: "+ 添加",
+    stepPending: "待执行",
+    stepRunning: "执行中...",
+    stepDone: "完成",
+    stepWarn: "超时继续",
+    stepError: "中止",
     modes: {
       0: "使能模式", 1: "准备模式", 2: "半身走路模式", 3: "全身行走模式",
       4: "跑步模式", 5: "舞蹈模式0", 8: "预设动作·打招呼", 9: "预设动作·握手",
@@ -533,6 +665,20 @@ const I18N = {
     confirmForceDisable: (msg) => `${msg}\n\nForce disable anyway?`,
     toastDisabled: "Disable command sent (START)",
     toastDisableErr: (e) => `Disable failed: ${e}`,
+    secChoreo: "Choreography Sequencer",
+    choreoIdle: "Idle",
+    choreoRunning: "Running",
+    btnRunChoreo: "▶ Run",
+    btnStopChoreo: "⏹ Stop",
+    btnLoadOutro: "Load Outro",
+    btnLoadCrab: "Load Crab",
+    btnClearChoreo: "Clear",
+    btnAddStep: "+ Add",
+    stepPending: "Pending",
+    stepRunning: "Running...",
+    stepDone: "Done",
+    stepWarn: "Timeout(cont)",
+    stepError: "Aborted",
     modes: {
       0: "Enabled", 1: "Ready (Switch)", 2: "Half Walk", 3: "Full Walk",
       4: "Running", 5: "Dance 0", 8: "Preset: Wave", 9: "Preset: Shake",
@@ -570,6 +716,8 @@ function applyI18n() {
     if (dict[key]) el.textContent = dict[key];
   });
   document.getElementById("velText").textContent = dict.velFmt(activeVel);
+  renderChoreoList();
+  updateChoreoBadge();
   if (lastSnapshot) renderSnapshot(lastSnapshot);
 }
 
@@ -614,6 +762,7 @@ function sendTeach(action) {
 
 async function sendStop() {
   const dict = I18N[lang];
+  choreoAbortFlag = true;
   stopVel();
   try {
     await postJson("/api/stop", {});
@@ -809,6 +958,277 @@ async function pollStatus() {
   }
 }
 
+// ===== Choreography Sequencer =====
+let choreoSteps = [];
+let choreoRunning = false;
+let choreoAbortFlag = false;
+let choreoT0 = 0;
+
+function choreoElapsed() {
+  const dt = (performance.now() - choreoT0) / 1000;
+  const m = Math.floor(dt / 60);
+  const s = (dt - m * 60).toFixed(1).padStart(4, "0");
+  return `${String(m).padStart(2, "0")}:${s}`;
+}
+
+function appendChoreoLog(msg) {
+  const el = document.getElementById("choreoLog");
+  el.textContent += `[${choreoElapsed()}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function updateChoreoBadge() {
+  const b = document.getElementById("choreoStatusBadge");
+  const dict = I18N[lang];
+  b.textContent = choreoRunning ? dict.choreoRunning : dict.choreoIdle;
+  b.className = "pill " + (choreoRunning ? "mode" : "");
+}
+
+function onKindChange() {
+  const k = document.getElementById("addKind").value;
+  document.getElementById("addModeVal").style.display = k === "mode" ? "" : "none";
+  document.getElementById("addActionVal").style.display = k === "action" ? "" : "none";
+  document.getElementById("addMoveInputs").style.display = k === "move" ? "flex" : "none";
+  document.getElementById("addIdxWrap").style.display = k === "action" ? "" : "none";
+  document.getElementById("addPauseWrap").style.display = k === "pause" ? "" : "none";
+}
+
+function formatStepLabel(st) {
+  if (st.kind === "mode") return `mode("${st.name}")`;
+  if (st.kind === "move") return `move(${st.x}, ${st.y}, ${st.z}, ${st.seconds}s)`;
+  if (st.kind === "action") return st.name === "PLAYTEACH" ? `action("${st.name}", idx=${st.index})` : `action("${st.name}")`;
+  return `pause(${st.seconds}s)`;
+}
+
+function renderChoreoList() {
+  const dict = I18N[lang];
+  const listEl = document.getElementById("choreoList");
+  const statusMap = {
+    pending: dict.stepPending,
+    running: dict.stepRunning,
+    done: dict.stepDone,
+    warn: dict.stepWarn,
+    error: dict.stepError
+  };
+  listEl.innerHTML = choreoSteps.map((st, idx) => `
+    <div class="choreo-item ${st.state || 'pending'}">
+      <span><b>#${idx + 1}</b> ${formatStepLabel(st)} ${st.note ? `· ${st.note}` : ""}</span>
+      <span class="step-ops">
+        <span class="pill">${statusMap[st.state || "pending"]}</span>
+        <button onclick="moveChoreoStep(${idx}, -1)" ${choreoRunning ? "disabled" : ""}>↑</button>
+        <button onclick="moveChoreoStep(${idx}, 1)" ${choreoRunning ? "disabled" : ""}>↓</button>
+        <button onclick="delChoreoStep(${idx})" ${choreoRunning ? "disabled" : ""}>✕</button>
+      </span>
+    </div>
+  `).join("");
+}
+
+function loadPreset(name) {
+  if (choreoRunning) return;
+  const idx = parseInt(document.getElementById("teachIdx").value || "1", 10);
+  if (name === "crab") {
+    choreoSteps = [
+      { kind: "mode", name: "FULLWALK" },
+      { kind: "move", x: 0, y: 0.4, z: 0, seconds: 1.5 },
+      { kind: "move", x: 0, y: -0.4, z: 0, seconds: 1.5 },
+      { kind: "action", name: "CHEER", index: 0 }
+    ];
+  } else {
+    choreoSteps = [
+      { kind: "mode", name: "WALK" },
+      { kind: "move", x: 0.4, y: 0, z: 0, seconds: 2.0 },
+      { kind: "move", x: 0, y: 0, z: 0.4, seconds: 1.5 },
+      { kind: "action", name: "SWING", index: 0 },
+      { kind: "action", name: "PLAYTEACH", index: idx },
+      { kind: "action", name: "CHEER", index: 0 }
+    ];
+  }
+  choreoSteps.forEach((s) => { s.state = "pending"; s.note = ""; });
+  renderChoreoList();
+}
+
+function clearChoreo() {
+  if (choreoRunning) return;
+  choreoSteps = [];
+  renderChoreoList();
+}
+
+function addStepFromUI() {
+  if (choreoRunning) return;
+  const k = document.getElementById("addKind").value;
+  if (k === "mode") {
+    choreoSteps.push({ kind: "mode", name: document.getElementById("addModeVal").value, state: "pending", note: "" });
+  } else if (k === "move") {
+    choreoSteps.push({
+      kind: "move",
+      x: parseFloat(document.getElementById("mvX").value || "0"),
+      y: parseFloat(document.getElementById("mvY").value || "0"),
+      z: parseFloat(document.getElementById("mvZ").value || "0"),
+      seconds: parseFloat(document.getElementById("mvS").value || "1.5"),
+      state: "pending", note: ""
+    });
+  } else if (k === "action") {
+    choreoSteps.push({
+      kind: "action",
+      name: document.getElementById("addActionVal").value,
+      index: parseInt(document.getElementById("actIdx").value || "1", 10),
+      state: "pending", note: ""
+    });
+  } else {
+    choreoSteps.push({
+      kind: "pause",
+      seconds: parseFloat(document.getElementById("pauseS").value || "1.0"),
+      state: "pending", note: ""
+    });
+  }
+  renderChoreoList();
+}
+
+function moveChoreoStep(idx, delta) {
+  const j = idx + delta;
+  if (j < 0 || j >= choreoSteps.length) return;
+  [choreoSteps[idx], choreoSteps[j]] = [choreoSteps[j], choreoSteps[idx]];
+  renderChoreoList();
+}
+
+function delChoreoStep(idx) {
+  choreoSteps.splice(idx, 1);
+  renderChoreoList();
+}
+
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function fetchStatusCheck(lastWmRef) {
+  const res = await fetch("/api/status");
+  const snap = await res.json();
+  if (!snap.connected || !snap.status) throw new Error("Robot disconnected");
+  const wm = snap.status.workmode;
+  if (lastWmRef.val !== null && wm !== lastWmRef.val) {
+    const nm = I18N[lang].modes[wm] || wm;
+    appendChoreoLog(`workmode change: ${lastWmRef.val} -> ${wm} (${nm})`);
+  }
+  lastWmRef.val = wm;
+  if (wm === 26 || wm === 30) {
+    await postJson("/api/stop", {});
+    throw new Error(`Safety abort: workmode=${wm}`);
+  }
+  return snap.status;
+}
+
+async function stopChoreo() {
+  choreoAbortFlag = true;
+  await sendStop();
+  if (choreoRunning) appendChoreoLog("Stopped by user (/api/stop)");
+}
+
+async function runChoreo() {
+  if (choreoRunning || choreoSteps.length === 0) return;
+  choreoRunning = true;
+  choreoAbortFlag = false;
+  choreoT0 = performance.now();
+  document.getElementById("choreoLog").textContent = "";
+  choreoSteps.forEach((s) => { s.state = "pending"; s.note = ""; });
+  updateChoreoBadge();
+  renderChoreoList();
+
+  const lastWmRef = { val: null };
+  const scale = getScale();
+
+  try {
+    const initSt = await fetchStatusCheck(lastWmRef);
+    if (initSt.workmode !== 2 && initSt.workmode !== 3) {
+      throw new Error(`Pre-flight failed: workmode=${initSt.workmode} (need 2 or 3)`);
+    }
+    if (initSt.bms.soc < 20) {
+      throw new Error(`Pre-flight failed: battery ${initSt.bms.soc}% < 20%`);
+    }
+    appendChoreoLog(`Start (${choreoSteps.length} steps, scale=${scale}, soc=${initSt.bms.soc}%)`);
+
+    for (let i = 0; i < choreoSteps.length; i++) {
+      if (choreoAbortFlag) throw new Error("Aborted");
+      const st = choreoSteps[i];
+      st.state = "running";
+      renderChoreoList();
+
+      if (st.kind === "mode") {
+        const target = st.name === "WALK" ? 2 : 3;
+        const cur = (await fetchStatusCheck(lastWmRef)).workmode;
+        if (cur !== target) {
+          await postJson("/api/cmd", { action: st.name, index: 0 });
+          const deadline = performance.now() + 8000;
+          let ok = false;
+          while (performance.now() < deadline && !choreoAbortFlag) {
+            const wm = (await fetchStatusCheck(lastWmRef)).workmode;
+            if (wm === target) { ok = true; break; }
+            await sleepMs(100);
+          }
+          if (!ok) { await postJson("/api/stop", {}); throw new Error(`Mode ${st.name} timeout (8s)`); }
+        }
+        st.note = `wm=${target}`;
+        st.state = "done";
+      } else if (st.kind === "move") {
+        const endT = performance.now() + st.seconds * 1000;
+        while (performance.now() < endT && !choreoAbortFlag) {
+          await postJson("/api/vel", { x: st.x * scale, y: st.y * scale, z: st.z * scale });
+          await fetchStatusCheck(lastWmRef);
+          await sleepMs(Math.min(200, Math.max(20, endT - performance.now())));
+        }
+        await postJson("/api/stop", {});
+        st.state = "done";
+      } else if (st.kind === "action") {
+        const baseWm = (await fetchStatusCheck(lastWmRef)).workmode;
+        await postJson("/api/cmd", { action: st.name, index: st.index || 0 });
+        let startedWm = null;
+        const tStart = performance.now() + 3000;
+        while (performance.now() < tStart && !choreoAbortFlag) {
+          const wm = (await fetchStatusCheck(lastWmRef)).workmode;
+          if (wm !== baseWm) { startedWm = wm; break; }
+          await sleepMs(100);
+        }
+        if (startedWm === null) {
+          appendChoreoLog(`WARN: ${st.name} did not start (3s), continuing`);
+          st.note = `${baseWm} (no-start)`;
+          st.state = "warn";
+        } else {
+          const tDone = performance.now() + 30000;
+          let done = false;
+          while (performance.now() < tDone && !choreoAbortFlag) {
+            const wm = (await fetchStatusCheck(lastWmRef)).workmode;
+            if (wm === baseWm) { done = true; break; }
+            await sleepMs(100);
+          }
+          if (!done) {
+            await postJson("/api/stop", {});
+            throw new Error(`Action ${st.name} timeout (30s)`);
+          }
+          st.note = `${baseWm} → ${startedWm} → ${baseWm}`;
+          st.state = "done";
+        }
+      } else {
+        const endT = performance.now() + st.seconds * 1000;
+        while (performance.now() < endT && !choreoAbortFlag) {
+          await fetchStatusCheck(lastWmRef);
+          await sleepMs(100);
+        }
+        st.state = "done";
+      }
+      appendChoreoLog(`step ${i + 1}/${choreoSteps.length} ${formatStepLabel(st)} ${st.note}`);
+      renderChoreoList();
+    }
+    appendChoreoLog("Completed!");
+  } catch (err) {
+    const runningStep = choreoSteps.find((s) => s.state === "running");
+    if (runningStep) runningStep.state = "error";
+    appendChoreoLog(`ABORT: ${err.message}`);
+    await postJson("/api/stop", {}).catch(() => {});
+  } finally {
+    choreoRunning = false;
+    updateChoreoBadge();
+    renderChoreoList();
+  }
+}
+
+loadPreset("outro");
 applyI18n();
 setInterval(pollStatus, 200);
 pollStatus();
