@@ -275,8 +275,8 @@
   </div>
   <div class="header-actions">
     <button id="langToggle" class="lang-btn" onclick="toggleLang()">EN / 中文</button>
-    <button class="warn" onclick="sendCmd('START')" data-i18n="btnStart">使能 / 失能 (START)</button>
-    <button class="danger" onclick="sendEstop()" data-i18n="btnEstop">紧急停止 (ESTOP)</button>
+    <button class="warn" onclick="sendDisable()" data-i18n="btnDisable">失能 (DISABLE)</button>
+    <button class="danger" onclick="sendStop()" data-i18n="btnStop">停止移动 (STOP)</button>
   </div>
 </header>
 
@@ -403,8 +403,8 @@
 const I18N = {
   zh: {
     brandTitle: "Boomy HighController 控制台",
-    btnStart: "使能 / 失能 (START)",
-    btnEstop: "紧急停止 (ESTOP)",
+    btnDisable: "失能 (DISABLE)",
+    btnStop: "停止移动 (STOP)",
     secDrive: "移动控制 (仅 WALK / PLAYTEACH / DEFAULT 有效)",
     secKeys: "键盘: WASD + Q/E",
     btnTurnL: "左转 Q",
@@ -457,8 +457,12 @@ const I18N = {
     toastSent: (a) => `已发送指令: ${a}`,
     toastErr: (e) => `发送失败: ${e}`,
     toastReqErr: (e) => `请求失败: ${e}`,
-    toastEstop: "已触发急停 / 失能",
-    toastEstopErr: (e) => `急停请求异常: ${e}`,
+    toastStop: "已停止移动 (速度清零)",
+    toastStopErr: (e) => `停止请求异常: ${e}`,
+    confirmDisable: "确认要对机器人执行失能 (DISABLE) 吗？失能后电机将卸力！",
+    confirmForceDisable: (msg) => `${msg}\n\n确定仍要强制失能 (force) 吗？`,
+    toastDisabled: "已发送失能指令 (START)",
+    toastDisableErr: (e) => `失能失败: ${e}`,
     modes: {
       0: "使能模式", 1: "准备模式", 2: "半身走路模式", 3: "全身行走模式",
       4: "跑步模式", 5: "舞蹈模式0", 8: "预设动作·打招呼", 9: "预设动作·握手",
@@ -469,8 +473,8 @@ const I18N = {
   },
   en: {
     brandTitle: "Boomy HighController Console",
-    btnStart: "Enable / Disable (START)",
-    btnEstop: "E-STOP",
+    btnDisable: "Disable (DISABLE)",
+    btnStop: "Stop Moving (STOP)",
     secDrive: "Motion Control (WALK / PLAYTEACH / DEFAULT)",
     secKeys: "Keys: WASD + Q/E",
     btnTurnL: "Turn L (Q)",
@@ -523,8 +527,12 @@ const I18N = {
     toastSent: (a) => `Sent: ${a}`,
     toastErr: (e) => `Failed: ${e}`,
     toastReqErr: (e) => `Request error: ${e}`,
-    toastEstop: "E-STOP / Disable triggered",
-    toastEstopErr: (e) => `E-STOP error: ${e}`,
+    toastStop: "Stopped moving (velocity zeroed)",
+    toastStopErr: (e) => `Stop request error: ${e}`,
+    confirmDisable: "Confirm DISABLE? Motors will lose torque immediately!",
+    confirmForceDisable: (msg) => `${msg}\n\nForce disable anyway?`,
+    toastDisabled: "Disable command sent (START)",
+    toastDisableErr: (e) => `Disable failed: ${e}`,
     modes: {
       0: "Enabled", 1: "Ready (Switch)", 2: "Half Walk", 3: "Full Walk",
       4: "Running", 5: "Dance 0", 8: "Preset: Wave", 9: "Preset: Shake",
@@ -604,14 +612,41 @@ function sendTeach(action) {
   sendCmd(action, idx);
 }
 
-async function sendEstop() {
+async function sendStop() {
   const dict = I18N[lang];
   stopVel();
   try {
-    await postJson("/api/estop", {});
-    toast(dict.toastEstop);
+    await postJson("/api/stop", {});
+    toast(dict.toastStop);
   } catch (e) {
-    toast(dict.toastEstopErr(e));
+    toast(dict.toastStopErr(e));
+  }
+}
+
+async function sendDisable() {
+  const dict = I18N[lang];
+  if (!confirm(dict.confirmDisable)) return;
+  try {
+    const res = await fetch("/api/disable", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true })
+    });
+    const data = await res.json();
+    if (res.status === 409) {
+      if (!confirm(dict.confirmForceDisable(data.error || "Standing mode warning"))) return;
+      const res2 = await fetch("/api/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true, force: true })
+      });
+      const data2 = await res2.json();
+      toast(res2.ok && data2.ok ? dict.toastDisabled : dict.toastDisableErr(data2.error || res2.status));
+      return;
+    }
+    toast(res.ok && data.ok ? dict.toastDisabled : dict.toastDisableErr(data.error || res.status));
+  } catch (e) {
+    toast(dict.toastDisableErr(e));
   }
 }
 
@@ -711,7 +746,7 @@ window.addEventListener("keydown", (e) => {
     recomputeKeys();
   } else if (e.code === "Space") {
     e.preventDefault();
-    sendEstop();
+    sendStop();
   }
 });
 window.addEventListener("keyup", (e) => {

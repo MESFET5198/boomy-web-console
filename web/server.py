@@ -38,6 +38,8 @@ WORKMODE_MAP = {
     33: "肘击动作",
 }
 
+STANDING_MODES = {2, 3, 5, 8, 9, 10, 13, 31, 32, 33}
+
 JOINT_NAMES = [
     "arm_l1_joint (左肩pitch)",
     "arm_l2_joint (左肩roll)",
@@ -179,15 +181,36 @@ class RobotBridge:
             self.vel = [clamp(x), clamp(y), clamp(z)]
             self.vel_updated_at = time.time()
 
-    def estop(self):
+    def _clear_cmd_queue(self):
+        # queue.Queue is internally thread-safe; never hold self.lock while draining it
+        while True:
+            try:
+                self.cmd_queue.get_nowait()
+            except queue.Empty:
+                break
+
+    def stop(self):
         with self.lock:
             self.vel = [0.0, 0.0, 0.0]
             self.vel_updated_at = 0.0
             cur_mode = self.latest_status["workmode"] if self.latest_status else None
-        # Doc p.25: when workmode != 30, sending START immediately enters disabled mode (30)
-        if cur_mode is not None and cur_mode != 30:
-            self.cmd_queue.put((ControlCmd.START, 0))
+        self._clear_cmd_queue()
         return cur_mode
+
+    def disable(self, confirm: bool = False, force: bool = False):
+        if not confirm:
+            return 400, {"ok": False, "error": "Confirmation required: {\"confirm\": true}"}
+        with self.lock:
+            cur_mode = self.latest_status["workmode"] if self.latest_status else None
+        if cur_mode in STANDING_MODES and not force:
+            return 409, {
+                "ok": False,
+                "workmode": cur_mode,
+                "error": "站立状态下失能会摔倒，请先收纳",
+            }
+        self.stop()
+        self.cmd_queue.put((ControlCmd.START, 0))
+        return 200, {"ok": True, "prev_mode": cur_mode}
 
     def get_snapshot(self):
         now = time.time()
@@ -266,9 +289,22 @@ class RequestHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True})
             return
 
-        if self.path == "/api/estop":
-            prev_mode = BRIDGE.estop()
+        if self.path == "/api/stop":
+            prev_mode = BRIDGE.stop()
             self._send_json(200, {"ok": True, "prev_mode": prev_mode})
+            return
+
+        if self.path == "/api/disable":
+            confirm = bool(data.get("confirm", False))
+            force = bool(data.get("force", False))
+            code, payload = BRIDGE.disable(confirm=confirm, force=force)
+            self._send_json(code, payload)
+            return
+
+        if self.path == "/api/estop":
+            print("[WebBridge] WARNING: POST /api/estop is deprecated; use /api/stop instead.", flush=True)
+            prev_mode = BRIDGE.stop()
+            self._send_json(200, {"ok": True, "prev_mode": prev_mode, "deprecated": True})
             return
 
         self._send_json(404, {"error": "Not found"})
