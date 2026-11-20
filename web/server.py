@@ -70,6 +70,8 @@ class RobotBridge:
         self.lock = threading.Lock()
         self.latest_status = None
         self.last_rx_time = 0.0
+        self._last_parse_mono = 0.0
+        self._last_wm = None
         self.initialized = False
         self.vel = [0.0, 0.0, 0.0]
         self.vel_updated_at = 0.0
@@ -110,6 +112,16 @@ class RobotBridge:
         self._control_loop()
 
     def _on_status(self, status):
+        # Throttle heavy Python dict construction to ~20Hz (unless workmode changes)
+        # to avoid GIL contention with the 100Hz publish_cmd loop.
+        now_mono = time.monotonic()
+        wm = int(status.workmode)
+        if wm == self._last_wm and (now_mono - self._last_parse_mono) < 0.05:
+            self.last_rx_time = time.time()
+            return
+        self._last_parse_mono = now_mono
+        self._last_wm = wm
+
         bms = status.bms_data
         imu = status.imu_data
         motors = []
@@ -125,8 +137,8 @@ class RobotBridge:
             })
 
         snap = {
-            "workmode": int(status.workmode),
-            "workmode_name": WORKMODE_MAP.get(int(status.workmode), f"未知模式({status.workmode})"),
+            "workmode": wm,
+            "workmode_name": WORKMODE_MAP.get(wm, f"未知模式({wm})"),
             "bms": {
                 "soc": int(bms.battery_soc),
                 "soh": int(bms.battery_soh),
@@ -145,7 +157,7 @@ class RobotBridge:
             self.last_rx_time = time.time()
 
     def _control_loop(self):
-        # 50Hz (20ms), satisfies >= 2ms minimum interval requirement
+        # 100Hz (10ms), matches official examples/py/test_high.py
         while not self._stop:
             now = time.time()
             with self.lock:
@@ -165,12 +177,16 @@ class RobotBridge:
             except Exception as exc:
                 print(f"[WebBridge] publish_cmd error: {exc}", flush=True)
 
-            time.sleep(0.02)
+            time.sleep(0.01)
 
     def send_action(self, action_name: str, index: int = 0):
         if not hasattr(ControlCmd, action_name):
             raise ValueError(f"Unknown ControlCmd: {action_name}")
         cmd_enum = getattr(ControlCmd, action_name)
+        if action_name != "DEFAULT":
+            with self.lock:
+                self.vel = [0.0, 0.0, 0.0]
+                self.vel_updated_at = 0.0
         self.cmd_queue.put((cmd_enum, max(0, int(index))))
 
     def set_velocity(self, x: float, y: float, z: float):

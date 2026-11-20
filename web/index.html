@@ -382,13 +382,13 @@
     </div>
 
     <div class="card">
-      <h2 data-i18n="secStateMachine">状态机切换 (顺序: 使能 → 准备 → 半身走路)</h2>
+      <h2 data-i18n="secStateMachine">状态机切换 (地面流程: 倒地起身 → 半身走路 → 一键收纳)</h2>
       <div class="btn-grid">
-        <button class="primary" onclick="sendCmd('SWITCH')" data-i18n="btnSwitch">准备模式 (SWITCH)</button>
+        <button class="primary" onclick="sendCmd('FALLTOSTAND')" data-i18n="btnStandUp">倒地起身 (地面)</button>
         <button class="success" onclick="sendCmd('WALK')" data-i18n="btnWalk">半身走路 (WALK)</button>
         <button class="success" onclick="sendCmd('FULLWALK')" data-i18n="btnFullWalk">全身行走 (FULLWALK)</button>
-        <button onclick="sendCmd('FALLTOSTAND')" data-i18n="btnStandUp">倒地起身</button>
         <button class="warn" onclick="sendCmd('STANDTOFALL')" data-i18n="btnFold">一键收纳</button>
+        <button onclick="sendSwitch()" data-i18n="btnSwitch">准备模式 (仅吊架)</button>
         <button onclick="sendCmd('DEFAULT')" data-i18n="btnDefault">空指令 (DEFAULT)</button>
       </div>
     </div>
@@ -533,11 +533,12 @@ const I18N = {
     btnRight: "右移 D",
     btnBack: "后退 S",
     lblSpeedScale: "最大速度倍率:",
-    secStateMachine: "状态机切换 (顺序: 使能 → 准备 → 半身走路)",
-    btnSwitch: "准备模式 (SWITCH)",
+    secStateMachine: "状态机切换 (地面流程: 倒地起身 → 半身走路 → 一键收纳)",
+    btnSwitch: "准备模式 (仅吊架)",
     btnWalk: "半身走路 (WALK)",
     btnFullWalk: "全身行走 (FULLWALK)",
-    btnStandUp: "倒地起身",
+    btnStandUp: "倒地起身 (地面)",
+    confirmSwitch: "⚠️ 警告：准备模式 (SWITCH) 没有动态平衡算法，地面无吊架进入会直接倒地！\n仅限吊架调试使用，确定要发送 SWITCH 吗？",
     btnFold: "一键收纳",
     btnDefault: "空指令 (DEFAULT)",
     secActions: "预设动作与舞蹈 (需处于半身走路模式)",
@@ -617,11 +618,12 @@ const I18N = {
     btnRight: "Right (D)",
     btnBack: "Back (S)",
     lblSpeedScale: "Max Speed Scale:",
-    secStateMachine: "State Machine (Enable → Switch → Walk)",
-    btnSwitch: "Ready (SWITCH)",
+    secStateMachine: "State Machine (Ground: Stand Up → Walk → Fold)",
+    btnSwitch: "Ready (Gantry Only)",
     btnWalk: "Half Walk (WALK)",
     btnFullWalk: "Full Walk (FULLWALK)",
-    btnStandUp: "Stand Up",
+    btnStandUp: "Stand Up (Ground)",
+    confirmSwitch: "⚠️ WARNING: Ready mode (SWITCH) disables dynamic balance and WILL FALL on the ground without a gantry!\nContinue anyway?",
     btnFold: "Fold / Stow",
     btnDefault: "Idle (DEFAULT)",
     secActions: "Preset Actions & Dances (Requires WALK mode)",
@@ -753,6 +755,11 @@ async function sendCmd(action, index = 0) {
   } catch (e) {
     toast(dict.toastReqErr(e));
   }
+}
+
+function sendSwitch() {
+  if (!confirm(I18N[lang].confirmSwitch)) return;
+  sendCmd("SWITCH");
 }
 
 function sendTeach(action) {
