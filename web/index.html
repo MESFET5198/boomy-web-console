@@ -444,6 +444,7 @@
           <option value="mode">MODE</option>
           <option value="move" selected>MOVE</option>
           <option value="action">ACTION</option>
+          <option value="speak">SPEAK</option>
           <option value="pause">PAUSE</option>
         </select>
         <select id="addModeVal" style="display:none;">
@@ -472,6 +473,9 @@
         </span>
         <span id="addPauseWrap" style="display:none;">
           s<input id="pauseS" type="number" step="0.5" min="0.2" max="30" value="1.0">
+        </span>
+        <span id="addSpeakWrap" style="display:none;">
+          <input id="speakText" type="text" style="width:200px;" value="Hey everyone! Check out our Kickstarter link below!" placeholder="Text or audio/file.wav">
         </span>
         <button onclick="addStepFromUI()" data-i18n="btnAddStep">+ 添加</button>
       </div>
@@ -1011,12 +1015,18 @@ function onKindChange() {
   document.getElementById("addMoveInputs").style.display = k === "move" ? "flex" : "none";
   document.getElementById("addIdxWrap").style.display = k === "action" ? "" : "none";
   document.getElementById("addPauseWrap").style.display = k === "pause" ? "" : "none";
+  document.getElementById("addSpeakWrap").style.display = k === "speak" ? "" : "none";
 }
 
 function formatStepLabel(st) {
   if (st.kind === "mode") return `mode("${st.name}")`;
   if (st.kind === "move") return `move(${st.x}, ${st.y}, ${st.z}, ${st.seconds}s)`;
   if (st.kind === "action") return st.name === "PLAYTEACH" ? `action("${st.name}", idx=${st.index}, ${st.duration || 5}s)` : `action("${st.name}")`;
+  if (st.kind === "speak") {
+    const raw = st.wav || st.text || "";
+    const short = raw.length > 26 ? raw.slice(0, 26) + "..." : raw;
+    return `speak("${short}")`;
+  }
   return `pause(${st.seconds}s)`;
 }
 
@@ -1057,6 +1067,7 @@ function loadPreset(name) {
       { kind: "mode", name: "WALK" },
       { kind: "move", x: 1.0, y: 0, z: 0, seconds: 2.0 },
       { kind: "move", x: 0, y: 0, z: 1.0, seconds: 1.5 },
+      { kind: "speak", text: "Hey everyone! Check out our Kickstarter link below!" },
       { kind: "action", name: "SWING", index: 0 },
       { kind: "action", name: "PLAYTEACH", index: idx, duration: 5.0 },
       { kind: "action", name: "CHEER", index: 0 }
@@ -1094,6 +1105,13 @@ function addStepFromUI() {
       duration: parseFloat(document.getElementById("actDur").value || "5.0"),
       state: "pending", note: ""
     });
+  } else if (k === "speak") {
+    const val = (document.getElementById("speakText").value || "").trim();
+    if (!val) return;
+    const step = val.toLowerCase().endsWith(".wav")
+      ? { kind: "speak", wav: val, state: "pending", note: "" }
+      : { kind: "speak", text: val, state: "pending", note: "" };
+    choreoSteps.push(step);
   } else {
     choreoSteps.push({
       kind: "pause",
@@ -1269,6 +1287,12 @@ async function runChoreo() {
           st.note = `${baseWm} -> ${startedWm} -> ${baseWm}`;
           st.state = "done";
         }
+      } else if (st.kind === "speak") {
+        const body = st.wav ? { wav: st.wav, blocking: false } : { text: st.text, blocking: false };
+        const res = await postJson("/api/speak", body);
+        if (!res.ok) throw new Error(`Speak failed: ${res.error || "unknown"}`);
+        st.note = res.duration_s ? `${res.duration_s}s` : "playing";
+        st.state = "done";
       } else {
         const endT = performance.now() + st.seconds * 1000;
         while (performance.now() < endT && !choreoAbortFlag) {

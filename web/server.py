@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import os
 import queue
+import shutil
+import struct
+import subprocess
 import sys
 import threading
 import time
+import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -13,6 +18,12 @@ os.environ.setdefault("CYCLONEDDS_URI", f"file://{os.path.join(ROOT_DIR, 'config
 sys.path.insert(0, os.path.join(ROOT_DIR, "build"))
 
 from highcontrol_py import ControlCmd, HighController
+
+try:
+    from mediacontrol_py import AudioStream, MediaController
+except Exception:
+    AudioStream = None
+    MediaController = None
 
 WORKMODE_MAP = {
     0: "使能模式",
@@ -79,6 +90,9 @@ class RobotBridge:
         self.cmd_queue = queue.Queue()
 
         self.ctrl = None
+        self.media_ctrl = None
+        self._media_lock = threading.Lock()
+        self._speak_stop = threading.Event()
         self._stop = False
         self._thread = threading.Thread(target=self._init_and_loop, daemon=True)
         self._thread.start()
@@ -211,7 +225,132 @@ class RobotBridge:
             self.vel_updated_at = 0.0
             cur_mode = self.latest_status["workmode"] if self.latest_status else None
         self._clear_cmd_queue()
+        if hasattr(self, "_speak_stop"):
+            self._speak_stop.set()
         return cur_mode
+
+    def _ensure_media(self):
+        if MediaController is None:
+            raise RuntimeError("mediacontrol_py is not available")
+        with self._media_lock:
+            if self.media_ctrl is None:
+                mc = MediaController.instance()
+                mc.init()
+                self.media_ctrl = mc
+            return self.media_ctrl
+
+    @staticmethod
+    def _synthesize_tts_wav(text: str, out_path: str):
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        if os.path.exists(out_path) and os.path.getsize(out_path) > 44:
+            return
+        ps = shutil.which("powershell.exe")
+        if ps:
+            win_path = subprocess.check_output(["wslpath", "-w", out_path], text=True).strip()
+            safe_text = text.replace("'", "''")
+            script = (
+                "Add-Type -AssemblyName System.Speech; "
+                "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+                "try { $s.SelectVoice('Microsoft Zira Desktop') } catch {}; "
+                "$fmt = New-Object System.Speech.AudioFormat.SpeechAudioFormatInfo("
+                "16000, [System.Speech.AudioFormat.AudioBitsPerSample]::Sixteen, "
+                "[System.Speech.AudioFormat.AudioChannel]::Stereo); "
+                f"$s.SetOutputToWaveFile('{win_path}', $fmt); "
+                f"$s.Speak('{safe_text}'); "
+                "$s.Dispose()"
+            )
+            subprocess.run([ps, "-NoProfile", "-Command", script], check=True)
+            return
+        espeak = shutil.which("espeak-ng") or shutil.which("espeak")
+        if espeak:
+            subprocess.run([espeak, "-w", out_path, text], check=True)
+            return
+        raise RuntimeError("No TTS engine found (need Windows powershell.exe or espeak-ng), pass wav file instead")
+
+    @staticmethod
+    def _load_wav_16k_2ch(wav_path: str):
+        with wave.open(wav_path, "rb") as wf:
+            ch = wf.getnchannels()
+            sr = wf.getframerate()
+            sw = wf.getsampwidth()
+            raw = wf.readframes(wf.getnframes())
+        if sw != 2:
+            raise ValueError(f"Only 16-bit PCM WAV supported, got {sw * 8}-bit")
+        total_samples = len(raw) // 2
+        samples = struct.unpack(f"<{total_samples}h", raw)
+        # Convert to stereo interleaved
+        if ch == 1:
+            stereo = []
+            for s in samples:
+                stereo.append(s)
+                stereo.append(s)
+        elif ch == 2:
+            stereo = list(samples)
+        else:
+            stereo = []
+            for i in range(0, len(samples) - ch + 1, ch):
+                stereo.append(samples[i])
+                stereo.append(samples[i + 1])
+        # Simple linear resample to 16000 Hz if needed
+        if sr != 16000 and len(stereo) >= 4:
+            in_frames = len(stereo) // 2
+            out_frames = max(1, int(in_frames * 16000 / sr))
+            resampled = []
+            ratio = (in_frames - 1) / max(1, out_frames - 1)
+            for i in range(out_frames):
+                pos = i * ratio
+                i0 = int(pos)
+                i1 = min(i0 + 1, in_frames - 1)
+                frac = pos - i0
+                l = int(stereo[i0 * 2] * (1.0 - frac) + stereo[i1 * 2] * frac)
+                r = int(stereo[i0 * 2 + 1] * (1.0 - frac) + stereo[i1 * 2 + 1] * frac)
+                resampled.append(max(-32768, min(32767, l)))
+                resampled.append(max(-32768, min(32767, r)))
+            stereo = resampled
+        return stereo
+
+    def speak(self, text: str = None, wav: str = None, blocking: bool = False):
+        if wav:
+            wav_path = wav if os.path.isabs(wav) else os.path.join(ROOT_DIR, wav)
+            if not os.path.exists(wav_path):
+                raise FileNotFoundError(f"WAV file not found: {wav_path}")
+        elif text:
+            digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+            wav_path = os.path.join(ROOT_DIR, "audio", f"tts_{digest}.wav")
+            self._synthesize_tts_wav(text, wav_path)
+        else:
+            raise ValueError("Must provide 'text' or 'wav'")
+
+        mc = self._ensure_media()
+        pcm_2ch = self._load_wav_16k_2ch(wav_path)
+        duration_s = round(len(pcm_2ch) / (2 * 16000), 2)
+
+        # Stop any previous playback and start new stream
+        self._speak_stop.set()
+        stop_ev = threading.Event()
+        self._speak_stop = stop_ev
+
+        def _stream():
+            frame_samples = 320 * 2  # 20ms @ 16kHz, 2ch
+            offset = 0
+            while offset < len(pcm_2ch) and not stop_ev.is_set():
+                chunk = pcm_2ch[offset : offset + frame_samples]
+                st = AudioStream()
+                st.timestamp_us = int(time.time() * 1_000_000)
+                st.channels = 2
+                st.sample_rate = 16000
+                st.format = 2
+                st.duration_ms = max(1, len(chunk) // 2 * 1000 // 16000)
+                st.audio_data = chunk
+                mc.publish_external_audio_playback_stream(st)
+                offset += frame_samples
+                time.sleep(0.02)
+
+        if blocking:
+            _stream()
+        else:
+            threading.Thread(target=_stream, daemon=True).start()
+        return {"ok": True, "wav": os.path.basename(wav_path), "duration_s": duration_s}
 
     def disable(self, confirm: bool = False, force: bool = False):
         if not confirm:
@@ -303,6 +442,17 @@ class RequestHandler(BaseHTTPRequestHandler):
         if self.path == "/api/vel":
             BRIDGE.set_velocity(data.get("x", 0.0), data.get("y", 0.0), data.get("z", 0.0))
             self._send_json(200, {"ok": True})
+            return
+
+        if self.path == "/api/speak":
+            text = data.get("text")
+            wav = data.get("wav")
+            blocking = bool(data.get("blocking", False))
+            try:
+                res = BRIDGE.speak(text=text, wav=wav, blocking=blocking)
+                self._send_json(200, res)
+            except Exception as exc:
+                self._send_json(400, {"ok": False, "error": str(exc)})
             return
 
         if self.path == "/api/stop":

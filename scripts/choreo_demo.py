@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Boomy choreography demo -- edit steps below to compose a routine."""
 import sys
-from choreo_lib import action, mode, move, parse_args, run_program
+from choreo_lib import action, mode, move, parse_args, run_program, speak
 
 
-def build_steps(program: str, teach_index: int, turn_dir: str, teach_duration: float = 5.0):
+def build_steps(program: str, teach_index: int, turn_dir: str, teach_duration: float = 5.0, say_text: str = "", say_wav: str = None):
     turn_z = 1.0 if turn_dir == "left" else -1.0
     if program == "crab":
         return [
@@ -12,11 +12,13 @@ def build_steps(program: str, teach_index: int, turn_dir: str, teach_duration: f
             move(0, 1.0, 0, 1.5),               # strafe left
             move(0, -1.0, 0, 1.5),              # strafe right
         ]
+    outro_line = speak(wav=say_wav) if say_wav else speak(say_text or "Hey everyone! Check out our Kickstarter link below!")
     return [
         mode("WALK"),
         move(1.0, 0, 0, 2.0),                   # walk into frame
         move(0, 0, turn_z, 1.5),                # turn to face camera
-        action("SWING"),                        # wave
+        outro_line,                             # speak through Boomy's speaker
+        action("SWING"),                        # wave while speaking
         action("PLAYTEACH", index=teach_index, duration=teach_duration),  # play taught gesture
         action("CHEER"),                        # cheer
     ]
@@ -24,5 +26,5 @@ def build_steps(program: str, teach_index: int, turn_dir: str, teach_duration: f
 
 if __name__ == "__main__":
     args = parse_args()
-    steps = build_steps(args.program, args.teach_index, args.turn, args.teach_duration)
+    steps = build_steps(args.program, args.teach_index, args.turn, args.teach_duration, args.say, args.say_wav)
     sys.exit(run_program(args.program, steps, args))

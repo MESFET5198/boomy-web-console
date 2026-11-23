@@ -101,6 +101,9 @@ def start_fake_server(state: FakeRobotState):
             if self.path == "/api/disable":
                 self._send(200, {"ok": True})
                 return
+            if self.path == "/api/speak":
+                self._send(200, {"ok": True, "duration_s": 2.1})
+                return
             self._send(404, {"error": "not found"})
 
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Handler)

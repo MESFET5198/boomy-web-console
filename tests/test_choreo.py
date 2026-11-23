@@ -256,6 +256,18 @@ class TestChoreoAndSafety(unittest.TestCase):
         walk_cmds = [b for _, _, p, b in self.state.requests if p == "/api/cmd" and b.get("action") == "WALK"]
         self.assertGreaterEqual(len(walk_cmds), 1)
 
+    def test_12_speak_step_calls_api_speak(self):
+        steps = [choreo_lib.speak("Check out our Kickstarter!")]
+        args = choreo_lib.parse_args(["--server", self.url])
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = choreo_lib.run_program("speak_test", steps, args, poll_interval=0.02)
+        self.assertEqual(rc, 0)
+        speak_reqs = [b for _, _, p, b in self.state.requests if p == "/api/speak"]
+        self.assertEqual(len(speak_reqs), 1)
+        self.assertEqual(speak_reqs[0]["text"], "Check out our Kickstarter!")
+        self.assertFalse(speak_reqs[0]["blocking"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

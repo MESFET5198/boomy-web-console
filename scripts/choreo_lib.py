@@ -105,6 +105,14 @@ def pause(seconds: float) -> Step:
     return Step("pause", f"PAUSE({seconds:.1f}s)", float(seconds), lambda c: c.exec_pause(seconds))
 
 
+def speak(text: Optional[str] = None, wav: Optional[str] = None, blocking: bool = False) -> Step:
+    if not text and not wav:
+        raise ValueError("speak() requires text or wav")
+    short = (text[:18] + "...") if (text and len(text) > 18) else (text or wav)
+    label = f"SPEAK({short})"
+    return Step("speak", label, 0.2, lambda c: c.exec_speak(text=text, wav=wav, blocking=blocking))
+
+
 class ChoreoClient:
     def __init__(
         self,
@@ -151,6 +159,14 @@ class ChoreoClient:
 
     def post_vel(self, x: float, y: float, z: float) -> dict:
         return self._request("POST", "/api/vel", {"x": x, "y": y, "z": z})
+
+    def post_speak(self, text: Optional[str] = None, wav: Optional[str] = None, blocking: bool = False) -> dict:
+        payload = {"blocking": bool(blocking)}
+        if wav:
+            payload["wav"] = wav
+        if text:
+            payload["text"] = text
+        return self._request("POST", "/api/speak", payload, timeout=15.0)
 
     def post_stop(self) -> None:
         try:
@@ -292,6 +308,12 @@ class ChoreoClient:
             time.sleep(min(self.poll_interval, max(0.0, end_t - time.monotonic())))
         return f"workmode {self.last_workmode}"
 
+    def exec_speak(self, text: Optional[str] = None, wav: Optional[str] = None, blocking: bool = False) -> str:
+        self._observe_status(self.get_status())
+        res = self.post_speak(text=text, wav=wav, blocking=blocking)
+        dur = res.get("duration_s")
+        return f"audio {dur:.1f}s" if isinstance(dur, (int, float)) else "audio started"
+
 
 def check_min_speed(steps: List[Step], speed_scale: float, min_speed: float, lang: str = "en") -> List[str]:
     warnings = []
@@ -319,6 +341,8 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--program", choices=["outro", "crab"], default="outro")
     p.add_argument("--teach-index", type=int, default=1)
     p.add_argument("--teach-duration", type=float, default=5.0)
+    p.add_argument("--say", default="Hey everyone! Check out our Kickstarter link below!")
+    p.add_argument("--say-wav", default=None)
     p.add_argument("--speed-scale", type=float, default=0.5)
     p.add_argument("--min-speed", type=float, default=0.5)
     p.add_argument("--turn", choices=["left", "right"], default="left")
