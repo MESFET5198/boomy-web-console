@@ -52,6 +52,8 @@ WORKMODE_MAP = {
 }
 
 STANDING_MODES = {2, 3, 5, 8, 9, 10, 13, 23, 31, 32, 33}
+DEFAULT_WAKEUP_REPLY = "I am here!"
+WAKEUP_BACKUP_PATH = os.path.join(ROOT_DIR, "audio", ".wakeup_backup.json")
 
 JOINT_NAMES = [
     "arm_l1_joint (左肩pitch)",
@@ -121,6 +123,7 @@ class RobotBridge:
                 if ok:
                     self.ctrl.subscribe_robot_hardware_status(self._on_status)
                     self.initialized = True
+                    threading.Thread(target=self._recover_wakeup_reply_on_startup, daemon=True).start()
                     break
             except Exception as exc:
                 print(f"[WebBridge] init error: {exc}", flush=True)
@@ -311,6 +314,46 @@ class RobotBridge:
             stereo = resampled
         return stereo
 
+    def _load_wakeup_backup(self):
+        if os.path.exists(WAKEUP_BACKUP_PATH):
+            try:
+                with open(WAKEUP_BACKUP_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                return data.get("wakeup_response")
+            except Exception:
+                return None
+        return None
+
+    def _save_wakeup_backup(self, phrase: str):
+        os.makedirs(os.path.dirname(WAKEUP_BACKUP_PATH), exist_ok=True)
+        with open(WAKEUP_BACKUP_PATH, "w", encoding="utf-8") as f:
+            json.dump({"wakeup_response": phrase}, f, ensure_ascii=False)
+
+    def _clear_wakeup_backup(self):
+        try:
+            if os.path.exists(WAKEUP_BACKUP_PATH):
+                os.remove(WAKEUP_BACKUP_PATH)
+        except Exception:
+            pass
+
+    def _recover_wakeup_reply_on_startup(self):
+        if MediaController is None:
+            return
+        try:
+            mc = self._ensure_media()
+            with self._media_lock:
+                backup = self._load_wakeup_backup()
+                cur = mc.get_wakeup_response_words()
+                target = backup or DEFAULT_WAKEUP_REPLY
+                if backup or (cur and cur != DEFAULT_WAKEUP_REPLY):
+                    print(f"[WebBridge] Startup wakeup reply check: '{cur}' -> restoring '{target}'", flush=True)
+                    time.sleep(0.6)
+                    mc.set_wakeup_response_words(target)
+                    time.sleep(0.6)
+                self._clear_wakeup_backup()
+        except Exception as exc:
+            print(f"[WebBridge] Startup wakeup recovery skipped: {exc}", flush=True)
+
     def speak(self, text: str = None, wav: str = None, blocking: bool = False):
         if not wav and not text:
             raise ValueError("Must provide 'text' or 'wav'")
@@ -319,18 +362,39 @@ class RobotBridge:
 
         # Native Boomy voice via WakeupResponseWords + TO_WAKEUP (matches robot's built-in male voice)
         if text and not wav:
+            self._speak_stop.set()
+            stop_ev = threading.Event()
+            self._speak_stop = stop_ev
+
             def _native_speak():
                 with self._media_lock:
-                    prev = mc.get_wakeup_response_words()
-                    mc.set_system_control(SystemControlType.TO_SLEEP, False)
-                    time.sleep(0.6)
-                    mc.set_wakeup_response_words(text)
-                    time.sleep(0.6)  # >= 500ms required by SDK doc p.54
-                    mc.set_system_control(SystemControlType.TO_WAKEUP, True)
-                    time.sleep(4.5)
-                    if prev and prev != text:
-                        mc.set_wakeup_response_words(prev)
+                    saved_prev = self._load_wakeup_backup()
+                    if not saved_prev:
+                        cur = mc.get_wakeup_response_words()
+                        saved_prev = cur if cur else DEFAULT_WAKEUP_REPLY
+                        self._save_wakeup_backup(saved_prev)
+                    try:
+                        mc.set_system_control(SystemControlType.TO_SLEEP, False)
                         time.sleep(0.6)
+                        mc.set_wakeup_response_words(text)
+                        time.sleep(0.6)  # >= 500ms required by SDK doc p.54
+                        mc.set_system_control(SystemControlType.TO_WAKEUP, True)
+                        # Wait for speech to finish, or wake early on STOP
+                        stop_ev.wait(4.5)
+                    finally:
+                        # Always put agent back to sleep (silent, is_need_reply=False) to close mic listening
+                        try:
+                            mc.set_system_control(SystemControlType.TO_SLEEP, False)
+                            time.sleep(0.6)
+                        except Exception as exc:
+                            print(f"[WebBridge] TO_SLEEP error: {exc}", flush=True)
+                        # Always restore original wakeup response phrase
+                        try:
+                            mc.set_wakeup_response_words(saved_prev)
+                            time.sleep(0.6)
+                            self._clear_wakeup_backup()
+                        except Exception as exc:
+                            print(f"[WebBridge] restore wakeup reply error: {exc}", flush=True)
 
             if blocking:
                 _native_speak()

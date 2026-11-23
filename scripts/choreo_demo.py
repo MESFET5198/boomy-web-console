@@ -12,7 +12,7 @@ def build_steps(program: str, teach_index: int, turn_dir: str, teach_duration: f
             move(0, 1.0, 0, 1.5),               # strafe left
             move(0, -1.0, 0, 1.5),              # strafe right
         ]
-    outro_line = speak(wav=say_wav) if say_wav else speak(say_text or "Hey everyone! Check out our Kickstarter link below!")
+    outro_line = speak(wav=say_wav) if say_wav else speak(say_text or "Sign up for the Kickstarter pre-launch. The link is down below!")
     return [
         mode("WALK"),
         move(1.0, 0, 0, 2.0),                   # walk into frame

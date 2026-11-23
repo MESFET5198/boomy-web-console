@@ -475,7 +475,7 @@
           s<input id="pauseS" type="number" step="0.5" min="0.2" max="30" value="1.0">
         </span>
         <span id="addSpeakWrap" style="display:none;">
-          <input id="speakText" type="text" style="width:200px;" value="Hey everyone! Check out our Kickstarter link below!" placeholder="Text or audio/file.wav">
+          <input id="speakText" type="text" style="width:200px;" value="Sign up for the Kickstarter pre-launch. The link is down below!" placeholder="Text or audio/file.wav">
         </span>
         <button onclick="addStepFromUI()" data-i18n="btnAddStep">+ 添加</button>
       </div>
@@ -1067,7 +1067,7 @@ function loadPreset(name) {
       { kind: "mode", name: "WALK" },
       { kind: "move", x: 1.0, y: 0, z: 0, seconds: 2.0 },
       { kind: "move", x: 0, y: 0, z: 1.0, seconds: 1.5 },
-      { kind: "speak", text: "Hey everyone! Check out our Kickstarter link below!" },
+      { kind: "speak", text: "Sign up for the Kickstarter pre-launch. The link is down below!" },
       { kind: "action", name: "SWING", index: 0 },
       { kind: "action", name: "PLAYTEACH", index: idx, duration: 5.0 },
       { kind: "action", name: "CHEER", index: 0 }

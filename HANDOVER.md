@@ -75,7 +75,8 @@ python3 web/server.py --host 0.0.0.0 --port 8080
   - `GET /api/status`：返回 `connected`、`age_ms`、`cmd_vel`、`status`（`workmode`、`bms`、`imu`、`motors[21]`）
   - `POST /api/cmd`：`{"action": "SWING", "index": 0}`
   - `POST /api/vel`：`{"x": 0.4, "y": 0.0, "z": 0.0}`（范围 `[-1, 1]`；`WALK` 下仅 `x, z` 有效，`FULLWALK` 下 `y` 横移有效）
-  - `POST /api/stop`：速度清零 + 清空动作队列，**绝不发 `START`**
+  - `POST /api/stop`：速度清零 + 清空动作队列，**绝不发 `START`**；可立即中断 WAV 音频推流；原厂男声模式会提前发 `TO_SLEEP(False)` 关闭监听并恢复原唤醒回复词（但机器人已开始念出的半句话可能仍会念完）。
+  - `POST /api/speak`：传 `text` 时走原厂男声（`WakeupResponseWords` + `TO_WAKEUP`，带 `try/finally` 与启动自检恢复，播完自动发静音 `TO_SLEEP(False)` 关闭麦克风监听）；传 `wav` 时走外部 WAV 推流。
   - `POST /api/disable`：需 `{"confirm": true}`；站立类模式 `{2,3,5,8,9,10,13,31,32,33}` 未带 `"force": true` 时返回 **HTTP 409** 拦截防摔倒
   - `POST /api/estop`：已弃用，行为等价 `/api/stop`
 

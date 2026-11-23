@@ -344,7 +344,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--program", choices=["outro", "crab"], default="outro")
     p.add_argument("--teach-index", type=int, default=1)
     p.add_argument("--teach-duration", type=float, default=5.0)
-    p.add_argument("--say", default="Hey everyone! Check out our Kickstarter link below!")
+    p.add_argument("--say", default="Sign up for the Kickstarter pre-launch. The link is down below!")
     p.add_argument("--say-wav", default=None)
     p.add_argument("--speed-scale", type=float, default=0.5)
     p.add_argument("--min-speed", type=float, default=0.5)
