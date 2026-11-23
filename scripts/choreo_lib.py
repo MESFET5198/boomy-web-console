@@ -46,6 +46,7 @@ class Step:
     label: str
     est_seconds: float
     fn: Callable[["ChoreoClient"], str]
+    vel: Optional[tuple] = None
 
 
 def mode(name: str) -> Step:
@@ -57,7 +58,7 @@ def mode(name: str) -> Step:
 
 def move(x: float, y: float, z: float, seconds: float) -> Step:
     label = f"MOVE({x:+.1f},{y:+.1f},{z:+.1f},{seconds:.1f}s)"
-    return Step("move", label, float(seconds), lambda c: c.exec_move(x, y, z, seconds))
+    return Step("move", label, float(seconds), lambda c: c.exec_move(x, y, z, seconds), vel=(float(x), float(y), float(z)))
 
 
 def action(name: str, index: int = 0) -> Step:
@@ -207,7 +208,7 @@ class ChoreoClient:
         while time.monotonic() < done_deadline:
             wm = self._observe_status(self.get_status())
             if wm == base_wm:
-                return f"workmode {base_wm} → {started_wm} → {wm}"
+                return f"workmode {base_wm} -> {started_wm} -> {wm}"
             time.sleep(self.poll_interval)
 
         print(f"[{self.elapsed()}] WARN: 动作 {name} 未完成 ({self.action_done_timeout:.1f}s 超时)，停止并中止", flush=True)
@@ -222,12 +223,29 @@ class ChoreoClient:
         return f"workmode {self.last_workmode}"
 
 
+def check_min_speed(steps: List[Step], speed_scale: float, min_speed: float) -> List[str]:
+    warnings = []
+    for idx, s in enumerate(steps, 1):
+        if s.kind != "move" or not s.vel:
+            continue
+        for axis, raw in zip(("x", "y", "z"), s.vel):
+            if raw == 0.0:
+                continue
+            eff = abs(raw * speed_scale)
+            if eff < min_speed:
+                msg = f"WARN: step {idx} {axis}={eff:.2f} 低于最低有效速度 {min_speed:.2f}，机器人可能不动"
+                print(msg, flush=True)
+                warnings.append(msg)
+    return warnings
+
+
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Boomy Choreography Runner")
     p.add_argument("--server", default="http://192.168.55.101:8080")
     p.add_argument("--program", choices=["outro", "crab"], default="outro")
     p.add_argument("--teach-index", type=int, default=1)
     p.add_argument("--speed-scale", type=float, default=0.5)
+    p.add_argument("--min-speed", type=float, default=0.5)
     p.add_argument("--turn", choices=["left", "right"], default="left")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--step", action="store_true")
@@ -242,7 +260,9 @@ def run_program(
 ) -> int:
     total = len(steps)
     est_total = sum(s.est_seconds for s in steps)
+    min_speed = getattr(args, "min_speed", 0.5)
     print(f"Program: {program_name} | Steps: {total} | SpeedScale: {args.speed_scale:.2f}", flush=True)
+    check_min_speed(steps, args.speed_scale, min_speed)
 
     if args.dry_run:
         for idx, s in enumerate(steps, 1):

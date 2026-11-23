@@ -146,6 +146,11 @@
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
+    transition: opacity 0.15s ease;
+  }
+  .drive-wrap.disabled {
+    opacity: 0.4;
+    pointer-events: none;
   }
   .joystick {
     width: 160px;
@@ -456,7 +461,7 @@
           <option value="DANCE2">DANCE2</option>
         </select>
         <span id="addMoveInputs" style="display:flex;gap:4px;align-items:center;">
-          x<input id="mvX" type="number" step="0.1" min="-1" max="1" value="0.4">
+          x<input id="mvX" type="number" step="0.1" min="-1" max="1" value="1.0">
           y<input id="mvY" type="number" step="0.1" min="-1" max="1" value="0">
           z<input id="mvZ" type="number" step="0.1" min="-1" max="1" value="0">
           s<input id="mvS" type="number" step="0.5" min="0.2" max="15" value="2.0">
@@ -820,6 +825,7 @@ function pushVel(x, y, z) {
 }
 
 function holdVel(x, y, z) {
+  if (choreoRunning) return;
   pushVel(x, y, z);
   clearInterval(velTimer);
   velTimer = setInterval(() => pushVel(x, y, z), 150);
@@ -865,6 +871,7 @@ function handleJoyMove(clientX, clientY) {
 }
 
 joyEl.addEventListener("pointerdown", (e) => {
+  if (choreoRunning) return;
   dragging = true;
   joyEl.setPointerCapture(e.pointerId);
   handleJoyMove(e.clientX, e.clientY);
@@ -897,18 +904,21 @@ function recomputeKeys() {
 }
 window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
+  if (e.code === "Space") {
+    e.preventDefault();
+    sendStop();
+    return;
+  }
+  if (choreoRunning) return;
   if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code) && !keysDown.has(e.code)) {
     keysDown.add(e.code);
     recomputeKeys();
-  } else if (e.code === "Space") {
-    e.preventDefault();
-    sendStop();
   }
 });
 window.addEventListener("keyup", (e) => {
   if (keysDown.has(e.code)) {
     keysDown.delete(e.code);
-    recomputeKeys();
+    if (!choreoRunning) recomputeKeys();
   }
 });
 
@@ -989,6 +999,8 @@ function updateChoreoBadge() {
   const dict = I18N[lang];
   b.textContent = choreoRunning ? dict.choreoRunning : dict.choreoIdle;
   b.className = "pill " + (choreoRunning ? "mode" : "");
+  const dw = document.querySelector(".drive-wrap");
+  if (dw) dw.classList.toggle("disabled", choreoRunning);
 }
 
 function onKindChange() {
@@ -1036,15 +1048,14 @@ function loadPreset(name) {
   if (name === "crab") {
     choreoSteps = [
       { kind: "mode", name: "FULLWALK" },
-      { kind: "move", x: 0, y: 0.4, z: 0, seconds: 1.5 },
-      { kind: "move", x: 0, y: -0.4, z: 0, seconds: 1.5 },
-      { kind: "action", name: "CHEER", index: 0 }
+      { kind: "move", x: 0, y: 1.0, z: 0, seconds: 1.5 },
+      { kind: "move", x: 0, y: -1.0, z: 0, seconds: 1.5 }
     ];
   } else {
     choreoSteps = [
       { kind: "mode", name: "WALK" },
-      { kind: "move", x: 0.4, y: 0, z: 0, seconds: 2.0 },
-      { kind: "move", x: 0, y: 0, z: 0.4, seconds: 1.5 },
+      { kind: "move", x: 1.0, y: 0, z: 0, seconds: 2.0 },
+      { kind: "move", x: 0, y: 0, z: 1.0, seconds: 1.5 },
       { kind: "action", name: "SWING", index: 0 },
       { kind: "action", name: "PLAYTEACH", index: idx },
       { kind: "action", name: "CHEER", index: 0 }
@@ -1125,13 +1136,15 @@ async function fetchStatusCheck(lastWmRef) {
 async function stopChoreo() {
   choreoAbortFlag = true;
   await sendStop();
-  if (choreoRunning) appendChoreoLog("Stopped by user (/api/stop)");
 }
 
 async function runChoreo() {
   if (choreoRunning || choreoSteps.length === 0) return;
+  const MIN_SPEED = 0.5;
   choreoRunning = true;
   choreoAbortFlag = false;
+  keysDown.clear();
+  stopVel();
   choreoT0 = performance.now();
   document.getElementById("choreoLog").textContent = "";
   choreoSteps.forEach((s) => { s.state = "pending"; s.note = ""; });
@@ -1140,6 +1153,17 @@ async function runChoreo() {
 
   const lastWmRef = { val: null };
   const scale = getScale();
+
+  // Warn if any non-zero move component falls below MIN_SPEED
+  choreoSteps.forEach((st, idx) => {
+    if (st.kind !== "move") return;
+    [["x", st.x], ["y", st.y], ["z", st.z]].forEach(([axis, raw]) => {
+      if (raw !== 0 && Math.abs(raw * scale) < MIN_SPEED) {
+        const eff = Math.abs(raw * scale).toFixed(2);
+        appendChoreoLog(`WARN: #${idx + 1} ${axis}=${eff} 低于最低有效速度 ${MIN_SPEED.toFixed(2)}，机器人可能不动`);
+      }
+    });
+  });
 
   try {
     const initSt = await fetchStatusCheck(lastWmRef);
@@ -1152,7 +1176,7 @@ async function runChoreo() {
     appendChoreoLog(`Start (${choreoSteps.length} steps, scale=${scale}, soc=${initSt.bms.soc}%)`);
 
     for (let i = 0; i < choreoSteps.length; i++) {
-      if (choreoAbortFlag) throw new Error("Aborted");
+      if (choreoAbortFlag) throw new Error("Stopped by user");
       const st = choreoSteps[i];
       st.state = "running";
       renderChoreoList();
@@ -1169,6 +1193,7 @@ async function runChoreo() {
             if (wm === target) { ok = true; break; }
             await sleepMs(100);
           }
+          if (choreoAbortFlag) throw new Error("Stopped by user");
           if (!ok) { await postJson("/api/stop", {}); throw new Error(`Mode ${st.name} timeout (8s)`); }
         }
         st.note = `wm=${target}`;
@@ -1181,6 +1206,7 @@ async function runChoreo() {
           await sleepMs(Math.min(200, Math.max(20, endT - performance.now())));
         }
         await postJson("/api/stop", {});
+        if (choreoAbortFlag) throw new Error("Stopped by user");
         st.state = "done";
       } else if (st.kind === "action") {
         const baseWm = (await fetchStatusCheck(lastWmRef)).workmode;
@@ -1192,6 +1218,7 @@ async function runChoreo() {
           if (wm !== baseWm) { startedWm = wm; break; }
           await sleepMs(100);
         }
+        if (choreoAbortFlag) throw new Error("Stopped by user");
         if (startedWm === null) {
           appendChoreoLog(`WARN: ${st.name} did not start (3s), continuing`);
           st.note = `${baseWm} (no-start)`;
@@ -1204,11 +1231,12 @@ async function runChoreo() {
             if (wm === baseWm) { done = true; break; }
             await sleepMs(100);
           }
+          if (choreoAbortFlag) throw new Error("Stopped by user");
           if (!done) {
             await postJson("/api/stop", {});
             throw new Error(`Action ${st.name} timeout (30s)`);
           }
-          st.note = `${baseWm} → ${startedWm} → ${baseWm}`;
+          st.note = `${baseWm} -> ${startedWm} -> ${baseWm}`;
           st.state = "done";
         }
       } else {
@@ -1217,6 +1245,7 @@ async function runChoreo() {
           await fetchStatusCheck(lastWmRef);
           await sleepMs(100);
         }
+        if (choreoAbortFlag) throw new Error("Stopped by user");
         st.state = "done";
       }
       appendChoreoLog(`step ${i + 1}/${choreoSteps.length} ${formatStepLabel(st)} ${st.note}`);
@@ -1226,7 +1255,11 @@ async function runChoreo() {
   } catch (err) {
     const runningStep = choreoSteps.find((s) => s.state === "running");
     if (runningStep) runningStep.state = "error";
-    appendChoreoLog(`ABORT: ${err.message}`);
+    if (err.message === "Stopped by user") {
+      appendChoreoLog("Stopped by user");
+    } else {
+      appendChoreoLog(`ABORT: ${err.message}`);
+    }
     await postJson("/api/stop", {}).catch(() => {});
   } finally {
     choreoRunning = false;

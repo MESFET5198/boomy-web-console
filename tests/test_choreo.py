@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.join(ROOT, "tests"))
 
 import choreo_demo
 import choreo_lib
+import teach_probe
 from fake_server import FakeRobotState, start_fake_server
 
 
@@ -33,12 +34,14 @@ class TestChoreoAndSafety(unittest.TestCase):
     def test_1_move_vel_interval_and_stop(self):
         client = choreo_lib.ChoreoClient(self.url, speed_scale=0.5, poll_interval=0.02)
         client.preflight()
-        client.exec_move(0.4, 0.0, 0.0, 0.7)
+        client.exec_move(1.0, 0.0, 0.0, 0.7)
 
         ts = self.state.vel_timestamps
         self.assertGreaterEqual(len(ts), 3)
         for a, b in zip(ts, ts[1:]):
             self.assertLessEqual(b - a, 0.25, f"vel interval {b - a:.3f}s > 0.25s")
+        vel_xs = [b["x"] for _, _, p, b in self.state.requests if p == "/api/vel"]
+        self.assertTrue(all(abs(v - 0.5) < 1e-6 for v in vel_xs))
         self.assertEqual(self.state.stop_count, 1)
 
     def test_2_action_start_and_complete(self):
@@ -205,6 +208,50 @@ class TestChoreoAndSafety(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(len(self.state.requests), 0)
         self.assertIn("DRY-RUN", buf.getvalue())
+
+    def test_9_min_speed_warning_threshold(self):
+        low_steps = [choreo_lib.move(0.4, 0.0, 0.0, 1.0)]
+        buf_low = io.StringIO()
+        with redirect_stdout(buf_low):
+            w_low = choreo_lib.check_min_speed(low_steps, speed_scale=0.5, min_speed=0.5)
+        self.assertEqual(len(w_low), 1)
+        self.assertIn("x=0.20", buf_low.getvalue())
+        self.assertIn("低于最低有效速度 0.50", buf_low.getvalue())
+
+        ok_steps = [choreo_lib.move(1.0, 0.0, 0.0, 1.0)]
+        buf_ok = io.StringIO()
+        with redirect_stdout(buf_ok):
+            w_ok = choreo_lib.check_min_speed(ok_steps, speed_scale=0.5, min_speed=0.5)
+        self.assertEqual(len(w_ok), 0)
+        self.assertEqual(buf_ok.getvalue(), "")
+
+    def test_10_dry_run_prints_low_speed_warning(self):
+        steps = [choreo_lib.move(0.4, 0.0, 0.0, 1.0)]
+        args = choreo_lib.parse_args(
+            ["--server", self.url, "--speed-scale", "0.5", "--min-speed", "0.5", "--dry-run"]
+        )
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = choreo_lib.run_program("test", steps, args)
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(self.state.requests), 0)
+        self.assertIn("x=0.20", buf.getvalue())
+        self.assertIn("低于最低有效速度 0.50", buf.getvalue())
+
+    def test_11_teach_probe_continues_after_no_start(self):
+        self.state.action_behavior[("PLAYTEACH", 0)] = (None, 0.0, None, None)
+        self.state.action_behavior[("PLAYTEACH", 1)] = (13, 0.04, 2, 0.1)
+        self.state.action_behavior[("PLAYTEACH", 2)] = (None, 0.0, None, None)
+        client = choreo_lib.ChoreoClient(
+            self.url, poll_interval=0.02, action_start_timeout=0.2, action_done_timeout=1.0
+        )
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            results = teach_probe.probe_indices(client, max_index=2, wait_enter=False)
+        self.assertEqual(len(results), 3)
+        self.assertIn("no-start", results[0][1])
+        self.assertIn("2 -> 13 -> 2", results[1][1])
+        self.assertIn("no-start", results[2][1])
 
 
 if __name__ == "__main__":

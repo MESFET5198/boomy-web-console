@@ -44,20 +44,24 @@ Open `http://192.168.55.101:8080` in your browser.
 python3 scripts/choreo_demo.py --program outro --dry-run
 
 # Run outro routine
-python3 scripts/choreo_demo.py --server http://192.168.55.101:8080 --program outro --speed-scale 0.3 --step
+python3 scripts/choreo_demo.py --server http://192.168.55.101:8080 --program outro --speed-scale 0.5 --step
 
 # Run crab lateral-walk routine
-python3 scripts/choreo_demo.py --server http://192.168.55.101:8080 --program crab --speed-scale 0.3 --step
+python3 scripts/choreo_demo.py --server http://192.168.55.101:8080 --program crab --speed-scale 0.5 --step
+
+# Probe PLAYTEACH indices 0..5 interactively
+python3 scripts/teach_probe.py --server http://192.168.55.101:8080 --max-index 5
 ```
 
 ## 上机前检查 (Pre-flight Checklist)
 
 - 地面清空，活动区域至少 **4 m × 2 m**，周围无障碍物或易碰倒物品。
-- 第一次上机务必使用保守参数：
+- 第一次上机使用 `--speed-scale 0.5 --step`（实测 0.3 会落在运控死区内导致机器人不动）：
   ```bash
-  python3 scripts/choreo_demo.py --speed-scale 0.3 --step
+  python3 scripts/choreo_demo.py --speed-scale 0.5 --step
   ```
-- 确保 **手机 App 的急停**（全局悬浮按键）和设备本体急停随时可用。
+- **网页编排台空格急停检查**：在网页编排台运行编排时按 **空格键**，确认整段程序立即停止（不再执行后续步骤），且编排日志显示 **`Stopped by user`**。
+- 确保 **手机 App 的急停**（全局悬浮按键）和设备本体急停随时可用（注意：跑 SDK 期间断开 App 控制界面避免双端冲突）。
 - 先在 `WALK` 模式下跑 `--program outro`，记录终端打印的每个动作实际 `workmode` 变化。
 - 确认无误后，再单独跑 `--program crab`（勿在单次节目中途来回切换 `WALK` 与 `FULLWALK`）。
 

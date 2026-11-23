@@ -36,8 +36,10 @@ class FakeRobotState:
             elif path == "/api/disable":
                 self.disable_count += 1
 
-    def trigger_action(self, action_name: str):
-        spec = self.action_behavior.get(action_name)
+    def trigger_action(self, action_name: str, index: int = 0):
+        spec = self.action_behavior.get((action_name, index))
+        if spec is None:
+            spec = self.action_behavior.get(action_name)
         if not spec:
             return
         enter_wm, enter_delay, exit_wm, exit_delay = spec
@@ -90,7 +92,7 @@ def start_fake_server(state: FakeRobotState):
             body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
             state.record("POST", self.path, body)
             if self.path == "/api/cmd":
-                state.trigger_action(str(body.get("action", "")).upper())
+                state.trigger_action(str(body.get("action", "")).upper(), int(body.get("index", 0)))
                 self._send(200, {"ok": True})
                 return
             if self.path in ("/api/vel", "/api/stop"):
