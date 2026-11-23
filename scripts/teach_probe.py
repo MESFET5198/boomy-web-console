@@ -11,13 +11,14 @@ def probe_indices(
     client: ChoreoClient,
     max_index: int = 5,
     wait_enter: bool = True,
+    duration: float = 5.0,
 ) -> List[tuple]:
     results = []
     client.preflight()
-    print(f"Probing PLAYTEACH indices 0..{max_index}", flush=True)
+    print(f"Probing PLAYTEACH indices 0..{max_index} (duration={duration:.1f}s)", flush=True)
     for idx in range(max_index + 1):
         print(f"[{client.elapsed()}] --- PLAYTEACH index={idx} ---", flush=True)
-        trace = client.exec_action("PLAYTEACH", index=idx)
+        trace = client.exec_action("PLAYTEACH", index=idx, duration=duration)
         if "no-start" in trace:
             print(f"[{client.elapsed()}] index={idx}: no recorded action ({trace})", flush=True)
         else:
@@ -32,6 +33,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Probe Boomy PLAYTEACH indices")
     p.add_argument("--server", default="http://192.168.55.101:8080")
     p.add_argument("--max-index", type=int, default=5)
+    p.add_argument("--duration", type=float, default=5.0, help="Seconds to wait before returning to WALK")
     p.add_argument("--no-pause", action="store_true", help="Do not wait for Enter between indices")
     return p.parse_args(argv)
 
@@ -40,7 +42,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
     client = ChoreoClient(args.server)
     try:
-        probe_indices(client, max_index=args.max_index, wait_enter=not args.no_pause)
+        probe_indices(client, max_index=args.max_index, wait_enter=not args.no_pause, duration=args.duration)
         print("Probe finished.", flush=True)
         return 0
     except KeyboardInterrupt:

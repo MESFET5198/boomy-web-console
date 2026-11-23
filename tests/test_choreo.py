@@ -239,19 +239,22 @@ class TestChoreoAndSafety(unittest.TestCase):
         self.assertIn("低于最低有效速度 0.50", buf.getvalue())
 
     def test_11_teach_probe_continues_after_no_start(self):
+        # Index 0 & 2 have no recorded action; Index 1 stays in workmode 13 until WALK is sent
         self.state.action_behavior[("PLAYTEACH", 0)] = (None, 0.0, None, None)
-        self.state.action_behavior[("PLAYTEACH", 1)] = (13, 0.04, 2, 0.1)
+        self.state.action_behavior[("PLAYTEACH", 1)] = (13, 0.04, None, None)
         self.state.action_behavior[("PLAYTEACH", 2)] = (None, 0.0, None, None)
         client = choreo_lib.ChoreoClient(
             self.url, poll_interval=0.02, action_start_timeout=0.2, action_done_timeout=1.0
         )
         buf = io.StringIO()
         with redirect_stdout(buf):
-            results = teach_probe.probe_indices(client, max_index=2, wait_enter=False)
+            results = teach_probe.probe_indices(client, max_index=2, wait_enter=False, duration=0.15)
         self.assertEqual(len(results), 3)
         self.assertIn("no-start", results[0][1])
         self.assertIn("2 -> 13 -> 2", results[1][1])
         self.assertIn("no-start", results[2][1])
+        walk_cmds = [b for _, _, p, b in self.state.requests if p == "/api/cmd" and b.get("action") == "WALK"]
+        self.assertGreaterEqual(len(walk_cmds), 1)
 
 
 if __name__ == "__main__":

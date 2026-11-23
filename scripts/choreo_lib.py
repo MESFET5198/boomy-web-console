@@ -61,10 +61,13 @@ def move(x: float, y: float, z: float, seconds: float) -> Step:
     return Step("move", label, float(seconds), lambda c: c.exec_move(x, y, z, seconds), vel=(float(x), float(y), float(z)))
 
 
-def action(name: str, index: int = 0) -> Step:
+def action(name: str, index: int = 0, duration: Optional[float] = None) -> Step:
     name = name.upper()
-    label = f"{name}#{index}" if name == "PLAYTEACH" else name
-    return Step("action", label, 3.0, lambda c: c.exec_action(name, index))
+    if name == "PLAYTEACH":
+        dur = 5.0 if duration is None else float(duration)
+        label = f"{name}#{index}({dur:.1f}s)"
+        return Step("action", label, dur, lambda c: c.exec_action(name, index, duration=dur))
+    return Step("action", name, 3.0, lambda c: c.exec_action(name, index))
 
 
 def pause(seconds: float) -> Step:
@@ -185,7 +188,7 @@ class ChoreoClient:
             self.post_stop()
         return f"workmode {wm_start}"
 
-    def exec_action(self, name: str, index: int = 0) -> str:
+    def exec_action(self, name: str, index: int = 0, duration: Optional[float] = None) -> str:
         base_wm = self._observe_status(self.get_status())
         self.post_cmd(name, index)
 
@@ -202,6 +205,26 @@ class ChoreoClient:
         if started_wm is None:
             print(f"[{self.elapsed()}] WARN: 动作 {name} 未开始 ({self.action_start_timeout:.1f}s 超时)，继续下一步", flush=True)
             return f"workmode {base_wm} (no-start)"
+
+        # PLAYTEACH holds its final pose in workmode 13 and does NOT auto-return to WALK (doc p.26).
+        if name == "PLAYTEACH":
+            hold_s = 5.0 if duration is None else float(duration)
+            end_t = time.monotonic() + hold_s
+            while time.monotonic() < end_t:
+                wm = self._observe_status(self.get_status())
+                if wm == base_wm:
+                    return f"workmode {base_wm} -> {started_wm} -> {wm}"
+                time.sleep(min(self.poll_interval, max(0.0, end_t - time.monotonic())))
+            # Manually switch back to WALK (2)
+            self.post_cmd("WALK", 0)
+            ret_deadline = time.monotonic() + self.mode_timeout
+            while time.monotonic() < ret_deadline:
+                wm = self._observe_status(self.get_status())
+                if wm == 2:
+                    return f"workmode {base_wm} -> {started_wm} -> 2"
+                time.sleep(self.poll_interval)
+            self.post_stop()
+            raise ChoreoAbort(f"示教播放后切回 WALK(2) 超时 ({self.mode_timeout:.1f}s)")
 
         # Phase 2: wait for workmode to return to base_wm (default 30s)
         done_deadline = time.monotonic() + self.action_done_timeout
@@ -244,6 +267,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--server", default="http://192.168.55.101:8080")
     p.add_argument("--program", choices=["outro", "crab"], default="outro")
     p.add_argument("--teach-index", type=int, default=1)
+    p.add_argument("--teach-duration", type=float, default=5.0)
     p.add_argument("--speed-scale", type=float, default=0.5)
     p.add_argument("--min-speed", type=float, default=0.5)
     p.add_argument("--turn", choices=["left", "right"], default="left")

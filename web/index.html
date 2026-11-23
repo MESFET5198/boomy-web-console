@@ -468,6 +468,7 @@
         </span>
         <span id="addIdxWrap" style="display:none;">
           idx<input id="actIdx" type="number" min="0" max="99" value="1">
+          s<input id="actDur" type="number" step="0.5" min="1" max="30" value="5.0" title="PLAYTEACH duration (s)">
         </span>
         <span id="addPauseWrap" style="display:none;">
           s<input id="pauseS" type="number" step="0.5" min="0.2" max="30" value="1.0">
@@ -1015,7 +1016,7 @@ function onKindChange() {
 function formatStepLabel(st) {
   if (st.kind === "mode") return `mode("${st.name}")`;
   if (st.kind === "move") return `move(${st.x}, ${st.y}, ${st.z}, ${st.seconds}s)`;
-  if (st.kind === "action") return st.name === "PLAYTEACH" ? `action("${st.name}", idx=${st.index})` : `action("${st.name}")`;
+  if (st.kind === "action") return st.name === "PLAYTEACH" ? `action("${st.name}", idx=${st.index}, ${st.duration || 5}s)` : `action("${st.name}")`;
   return `pause(${st.seconds}s)`;
 }
 
@@ -1057,7 +1058,7 @@ function loadPreset(name) {
       { kind: "move", x: 1.0, y: 0, z: 0, seconds: 2.0 },
       { kind: "move", x: 0, y: 0, z: 1.0, seconds: 1.5 },
       { kind: "action", name: "SWING", index: 0 },
-      { kind: "action", name: "PLAYTEACH", index: idx },
+      { kind: "action", name: "PLAYTEACH", index: idx, duration: 5.0 },
       { kind: "action", name: "CHEER", index: 0 }
     ];
   }
@@ -1090,6 +1091,7 @@ function addStepFromUI() {
       kind: "action",
       name: document.getElementById("addActionVal").value,
       index: parseInt(document.getElementById("actIdx").value || "1", 10),
+      duration: parseFloat(document.getElementById("actDur").value || "5.0"),
       state: "pending", note: ""
     });
   } else {
@@ -1223,6 +1225,34 @@ async function runChoreo() {
           appendChoreoLog(`WARN: ${st.name} did not start (3s), continuing`);
           st.note = `${baseWm} (no-start)`;
           st.state = "warn";
+        } else if (st.name === "PLAYTEACH") {
+          // PLAYTEACH holds its final pose in workmode 13 and requires manual WALK return (doc p.26)
+          const holdMs = (st.duration || 5.0) * 1000;
+          const tHold = performance.now() + holdMs;
+          let autoReturned = false;
+          while (performance.now() < tHold && !choreoAbortFlag) {
+            const wm = (await fetchStatusCheck(lastWmRef)).workmode;
+            if (wm === baseWm) { autoReturned = true; break; }
+            await sleepMs(100);
+          }
+          if (choreoAbortFlag) throw new Error("Stopped by user");
+          if (!autoReturned) {
+            await postJson("/api/cmd", { action: "WALK", index: 0 });
+            const tRet = performance.now() + 8000;
+            let back = false;
+            while (performance.now() < tRet && !choreoAbortFlag) {
+              const wm = (await fetchStatusCheck(lastWmRef)).workmode;
+              if (wm === 2) { back = true; break; }
+              await sleepMs(100);
+            }
+            if (choreoAbortFlag) throw new Error("Stopped by user");
+            if (!back) {
+              await postJson("/api/stop", {});
+              throw new Error("PLAYTEACH return to WALK(2) timeout (8s)");
+            }
+          }
+          st.note = `${baseWm} -> ${startedWm} -> 2`;
+          st.state = "done";
         } else {
           const tDone = performance.now() + 30000;
           let done = false;
