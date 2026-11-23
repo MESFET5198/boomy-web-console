@@ -610,7 +610,7 @@ const I18N = {
       0: "使能模式", 1: "准备模式", 2: "半身走路模式", 3: "全身行走模式",
       4: "跑步模式", 5: "舞蹈模式0", 8: "预设动作·打招呼", 9: "预设动作·握手",
       10: "预设动作·欢呼", 11: "开始示教", 12: "结束示教", 13: "播放示教",
-      14: "保存示教", 26: "保护模式", 27: "倒地起身", 28: "起身倒地",
+      14: "保存示教", 23: "播放示教", 26: "保护模式", 27: "倒地起身", 28: "起身倒地",
       29: "保存示教动作", 30: "失能模式", 31: "舞蹈模式1", 32: "舞蹈模式2", 33: "肘击动作"
     }
   },
@@ -695,7 +695,7 @@ const I18N = {
       0: "Enabled", 1: "Ready (Switch)", 2: "Half Walk", 3: "Full Walk",
       4: "Running", 5: "Dance 0", 8: "Preset: Wave", 9: "Preset: Shake",
       10: "Preset: Cheer", 11: "Start Teach", 12: "End Teach", 13: "Play Teach",
-      14: "Save Teach", 26: "Protected", 27: "Fall to Stand", 28: "Stand to Fall",
+      14: "Save Teach", 23: "Play Teach", 26: "Protected", 27: "Fall to Stand", 28: "Stand to Fall",
       29: "Saving Teach", 30: "Disabled", 31: "Dance 1", 32: "Dance 2", 33: "Elbow Strike"
     }
   }
@@ -1268,6 +1268,8 @@ async function runChoreo() {
               await postJson("/api/stop", {});
               throw new Error("PLAYTEACH return to WALK(2) timeout (8s)");
             }
+            // Brief settle delay after returning to WALK(2) so the next action (e.g. CHEER) is accepted
+            await sleepMs(800);
           }
           st.note = `${baseWm} -> ${startedWm} -> 2`;
           st.state = "done";

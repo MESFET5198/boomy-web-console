@@ -22,6 +22,7 @@ WORKMODE_NAMES_ZH = {
     12: "结束示教",
     13: "播放示教",
     14: "保存示教",
+    23: "播放示教",
     26: "保护模式",
     27: "倒地起身",
     28: "起身倒地",
@@ -46,6 +47,7 @@ WORKMODE_NAMES_EN = {
     12: "End Teach",
     13: "Play Teach",
     14: "Save Teach",
+    23: "Play Teach",
     26: "Protected",
     27: "Fall to Stand",
     28: "Stand to Fall",
@@ -275,6 +277,7 @@ class ChoreoClient:
             while time.monotonic() < ret_deadline:
                 wm = self._observe_status(self.get_status())
                 if wm == 2:
+                    time.sleep(0.8)  # settle in WALK(2) before next action
                     return f"workmode {base_wm} -> {started_wm} -> 2"
                 time.sleep(self.poll_interval)
             self.post_stop()
