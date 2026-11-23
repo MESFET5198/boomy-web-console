@@ -21,8 +21,8 @@
 ## 2. 本机环境与网络架构
 
 ### 2.1 关键目录
-- **Git 仓库（开发/推送用）**：`C:\Users\Work42\.gemini\antigravity\scratch\boomy-web-console`
-- **运行目录（含已编译 SDK）**：`C:\Users\Work42\.gemini\antigravity\scratch\noetix_sdk_boomy`
+- **Git 仓库（开发/推送用）**：`<WORKSPACE>/boomy-web-console`
+- **运行目录（含已编译 SDK）**：`<WORKSPACE>/noetix_sdk_boomy`
   - 已在 WSL2 Ubuntu 24.04 中编译完成 `build/example_high` 与 `build/highcontrol_py.cpython-312-x86_64-linux-gnu.so`。
   - 注意：在 Windows 下 `git clone` 官方 SDK 会破坏 `dds/x86_64/lib/*.so` 的软链接，已在 WSL2 下用 `git -c core.symlinks=true checkout -- dds/ lib/` 修复。
 
@@ -32,7 +32,7 @@
   - Windows 10（Build 19045）不支持 Windows 11 的 `networkingMode=mirrored`；而默认 NAT 模式下 WSL2 内部 IP 为 `172.24.x.x`，运控板发往 `192.168.55.101` 的 DDS UDP 回包无法穿透 NAT。
 - **当前稳定方案**：
   - 已启用 Hyper-V，并创建外部虚拟交换机 **`WSLBridge`** 绑定到接了 55 网段二级路由器网线的 **`以太网 12`**（`-AllowManagementOS $true`，保留宿主机访问权限，使 Windows 浏览器可直接打开 `http://192.168.55.101:8080`）。
-  - 配置文件 `C:\Users\Work42\.wslconfig`：
+  - 配置文件 `%USERPROFILE%\.wslconfig`：
     ```ini
     [wsl2]
     networkingMode=bridged
@@ -49,7 +49,7 @@
 在 **WSL2 Ubuntu** 终端中执行：
 
 ```bash
-cd /mnt/c/Users/Work42/.gemini/antigravity/scratch/noetix_sdk_boomy
+cd <PATH_TO_NOETIX_SDK_BOOMY>
 
 # 1. 锁定 192.168.55.101 并检查与运控板 192.168.55.102 连通性
 ./setup_ip.sh
@@ -91,11 +91,11 @@ python3 web/server.py --host 0.0.0.0 --port 8080
   # 预览（不发请求）
   python3 scripts/choreo_demo.py --dry-run
   # 保守上机单步测试
-  python3 scripts/choreo_demo.py --server http://192.168.55.101:8080 --program outro --speed-scale 0.3 --step
+  python3 scripts/choreo_demo.py --server http://192.168.55.101:8080 --program outro --speed-scale 0.5 --step
   ```
-- 自动测试（无需真机，覆盖 8 项安全与状态机用例）：
+- 自动测试（无需真机，覆盖 11 项安全与状态机用例）：
   ```bash
-  cd /mnt/c/Users/Work42/.gemini/antigravity/scratch/boomy-web-console
+  cd <PATH_TO_BOOMY_WEB_CONSOLE>
   python3 -m unittest discover -s tests -v
   ```
 

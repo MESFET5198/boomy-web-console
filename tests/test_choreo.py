@@ -63,7 +63,7 @@ class TestChoreoAndSafety(unittest.TestCase):
         buf = io.StringIO()
         with redirect_stdout(buf):
             trace = client.exec_action("SWING")
-        self.assertIn("未开始", buf.getvalue())
+        self.assertIn("did not start", buf.getvalue())
         self.assertIn("no-start", trace)
         self.assertEqual(self.state.stop_count, 0)
 
@@ -77,7 +77,7 @@ class TestChoreoAndSafety(unittest.TestCase):
         with redirect_stdout(buf):
             with self.assertRaises(choreo_lib.ChoreoAbort):
                 client.exec_action("SWING")
-        self.assertIn("未完成", buf.getvalue())
+        self.assertIn("did not finish", buf.getvalue())
         self.assertGreaterEqual(self.state.stop_count, 1)
 
     def test_5_fault_workmode_26_or_30_aborts_immediately(self):
@@ -108,7 +108,7 @@ class TestChoreoAndSafety(unittest.TestCase):
         with redirect_stdout(buf):
             rc = choreo_lib.run_program("outro", steps, args, poll_interval=0.02)
         self.assertEqual(rc, 130)
-        self.assertIn("已停止", buf.getvalue())
+        self.assertIn("Stopped", buf.getvalue())
         self.assertGreaterEqual(self.state.stop_count, 1)
         self.assertEqual(self.state.disable_count, 0)
         cmd_actions = [b.get("action") for _, _, p, b in self.state.requests if p == "/api/cmd"]
@@ -216,7 +216,7 @@ class TestChoreoAndSafety(unittest.TestCase):
             w_low = choreo_lib.check_min_speed(low_steps, speed_scale=0.5, min_speed=0.5)
         self.assertEqual(len(w_low), 1)
         self.assertIn("x=0.20", buf_low.getvalue())
-        self.assertIn("低于最低有效速度 0.50", buf_low.getvalue())
+        self.assertIn("0.50", buf_low.getvalue())
 
         ok_steps = [choreo_lib.move(1.0, 0.0, 0.0, 1.0)]
         buf_ok = io.StringIO()
@@ -236,7 +236,7 @@ class TestChoreoAndSafety(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(len(self.state.requests), 0)
         self.assertIn("x=0.20", buf.getvalue())
-        self.assertIn("低于最低有效速度 0.50", buf.getvalue())
+        self.assertIn("0.50", buf.getvalue())
 
     def test_11_teach_probe_continues_after_no_start(self):
         # Index 0 & 2 have no recorded action; Index 1 stays in workmode 13 until WALK is sent

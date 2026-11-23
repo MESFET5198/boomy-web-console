@@ -904,12 +904,12 @@ function recomputeKeys() {
   }
 }
 window.addEventListener("keydown", (e) => {
-  if (e.target.tagName === "INPUT") return;
   if (e.code === "Space") {
     e.preventDefault();
     sendStop();
     return;
   }
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || e.target.tagName === "TEXTAREA") return;
   if (choreoRunning) return;
   if (["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"].includes(e.code) && !keysDown.has(e.code)) {
     keysDown.add(e.code);

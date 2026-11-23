@@ -34,20 +34,21 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p.add_argument("--server", default="http://192.168.55.101:8080")
     p.add_argument("--max-index", type=int, default=5)
     p.add_argument("--duration", type=float, default=5.0, help="Seconds to wait before returning to WALK")
+    p.add_argument("--lang", choices=["en", "zh"], default="en")
     p.add_argument("--no-pause", action="store_true", help="Do not wait for Enter between indices")
     return p.parse_args(argv)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
-    client = ChoreoClient(args.server)
+    client = ChoreoClient(args.server, lang=args.lang)
     try:
         probe_indices(client, max_index=args.max_index, wait_enter=not args.no_pause, duration=args.duration)
         print("Probe finished.", flush=True)
         return 0
     except KeyboardInterrupt:
         client.post_stop()
-        print("已停止", flush=True)
+        print("已停止" if args.lang == "zh" else "Stopped", flush=True)
         return 130
     except ChoreoAbort as exc:
         print(f"ABORT: {exc}", file=sys.stderr, flush=True)
