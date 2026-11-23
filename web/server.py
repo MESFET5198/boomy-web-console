@@ -20,10 +20,11 @@ sys.path.insert(0, os.path.join(ROOT_DIR, "build"))
 from highcontrol_py import ControlCmd, HighController
 
 try:
-    from mediacontrol_py import AudioStream, MediaController
+    from mediacontrol_py import AudioStream, MediaController, SystemControlType
 except Exception:
     AudioStream = None
     MediaController = None
+    SystemControlType = None
 
 WORKMODE_MAP = {
     0: "使能模式",
@@ -311,18 +312,36 @@ class RobotBridge:
         return stereo
 
     def speak(self, text: str = None, wav: str = None, blocking: bool = False):
-        if wav:
-            wav_path = wav if os.path.isabs(wav) else os.path.join(ROOT_DIR, wav)
-            if not os.path.exists(wav_path):
-                raise FileNotFoundError(f"WAV file not found: {wav_path}")
-        elif text:
-            digest = hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
-            wav_path = os.path.join(ROOT_DIR, "audio", f"tts_{digest}.wav")
-            self._synthesize_tts_wav(text, wav_path)
-        else:
+        if not wav and not text:
             raise ValueError("Must provide 'text' or 'wav'")
 
         mc = self._ensure_media()
+
+        # Native Boomy voice via WakeupResponseWords + TO_WAKEUP (matches robot's built-in male voice)
+        if text and not wav:
+            def _native_speak():
+                with self._media_lock:
+                    prev = mc.get_wakeup_response_words()
+                    mc.set_system_control(SystemControlType.TO_SLEEP, False)
+                    time.sleep(0.6)
+                    mc.set_wakeup_response_words(text)
+                    time.sleep(0.6)  # >= 500ms required by SDK doc p.54
+                    mc.set_system_control(SystemControlType.TO_WAKEUP, True)
+                    time.sleep(4.5)
+                    if prev and prev != text:
+                        mc.set_wakeup_response_words(prev)
+                        time.sleep(0.6)
+
+            if blocking:
+                _native_speak()
+            else:
+                threading.Thread(target=_native_speak, daemon=True).start()
+            return {"ok": True, "mode": "native", "text": text}
+
+        wav_path = wav if os.path.isabs(wav) else os.path.join(ROOT_DIR, wav)
+        if not os.path.exists(wav_path):
+            raise FileNotFoundError(f"WAV file not found: {wav_path}")
+
         pcm_2ch = self._load_wav_16k_2ch(wav_path)
         duration_s = round(len(pcm_2ch) / (2 * 16000), 2)
 
@@ -351,7 +370,7 @@ class RobotBridge:
             _stream()
         else:
             threading.Thread(target=_stream, daemon=True).start()
-        return {"ok": True, "wav": os.path.basename(wav_path), "duration_s": duration_s}
+        return {"ok": True, "mode": "wav", "wav": os.path.basename(wav_path), "duration_s": duration_s}
 
     def disable(self, confirm: bool = False, force: bool = False):
         if not confirm:
